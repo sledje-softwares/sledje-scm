@@ -146,7 +146,7 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-eudoxus overflow-clip">
+    <div className="min-h-screen bg-white text-slate-900 font-sans overflow-clip">
       {/* Hero Section with animated width and border radius */}
       <section
         ref={heroRef}
@@ -175,7 +175,7 @@ export default function LandingPage() {
         <div
           className="absolute top-0 left-0 w-full h-full z-10 pointer-events-none"
           style={{
-            background: "linear-gradient(to right, rgba(20,30,48,0.7) 40%, rgba(20,30,48,0.2) 70%, rgba(20,30,48,0) 100%)",
+            background: "linear-gradient(to right, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.4) 50%, rgba(15, 23, 42, 0) 100%)",
             minHeight: "100vh",
             minWidth: "100vw",
             borderRadius: heroRadius,
@@ -183,10 +183,10 @@ export default function LandingPage() {
           }}
         />
         {/* Content aligned to left and above the video */}
-        <div className="max-w-4xl relative z-20 flex flex-col items-start px-7 md:px-12 ml-16 md:ml-8">
+        <div className="max-w-5xl relative z-20 flex flex-col items-start px-8 md:px-16 ml-0 md:ml-8">
           <SplitText
             text="Bridging Retailers"
-            className="text-5xl md:text-6xl py-2 font-bold leading-tight mb-6 tracking-tight text-white md:tracking-tight text-left"
+            className="text-5xl md:text-7xl py-2 font-bold leading-tight mb-2 tracking-tight text-white text-left"
             delay={80}
             duration={0.4}
             ease="power3.out"
@@ -200,7 +200,7 @@ export default function LandingPage() {
           />
           <SplitText
             text="& Distributors"
-            className="text-5xl md:text-6xl font-bold leading-tight mb-6 tracking-tight text-white md:tracking-tight text-left"
+            className="text-5xl md:text-7xl font-bold leading-tight mb-8 tracking-tight text-white text-left"
             delay={80}
             duration={0.4}
             ease="power3.out"
@@ -213,51 +213,46 @@ export default function LandingPage() {
             onLetterAnimationComplete={handleAnimationComplete}
           />
           <button
-            className="mt-8 px-10 py-3 border border-white text-white rounded-full bg-white bg-opacity-0 backdrop-sm font-medium transition hover:bg-opacity-20 text-bold"
-            style={{
-              font:"Eudoxus Sans",
-              fontWeight: 400,
-              boxShadow: "0 2px 16px 0 rgba(0,0,0,0.10)"
-            }}
+            className="mt-8 px-8 py-3 border border-white/30 text-white rounded-full bg-white/10 backdrop-blur-md font-medium transition hover:bg-white/20 text-lg shadow-lg"
           >
             Learn more
           </button>
         </div>
       </section>
-        {/* Why Do We Exist Section */}
-        <section
-          ref={whyExistRef}
-          className="flex justify-between items-centre py-14 bg-white pl-2 pr-2 w-full"
+      {/* Why Do We Exist Section */}
+      <section
+        ref={whyExistRef}
+        className="flex justify-between items-center py-24 bg-white px-4 w-full"
+      >
+        <div
+          className="w-full max-w-7xl mx-auto bg-white rounded-3xl p-0 flex flex-col items-start overflow-hidden"
+          style={{
+            transform: `scale(${whyExistScale})`,
+            transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)", // match hero section
+            willChange: "transform"
+          }}
         >
-          <div
-            className="w-full justify-between items-centre bg-white rounded-2xl  p-0 flex flex-col items-start overflow-hidden"
-            style={{
-              transform: `scale(${whyExistScale})`,
-              transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)", // match hero section
-              willChange: "transform"
-            }}
-          >
-            <h2 className="text-7xl md:text-5xl font-bold leading-tight mb-6 tracking-tight text-left pl-16 pt-12">
-              <span className="bg-gradient-to-r from-purple-500 via-violet-500 to-teal-400 bg-clip-text text-transparent font-eudoxus">
-                Why Do We Exist
-              </span>
-            </h2>
-            <div className="text-xl text-gray-600 mb-10  text-left pl-16 mb-8 font-eudoxus w-full pr-16">
-              We exist to empower retailers and distributors with modern, efficient, and elegant software solutions that bridge the gap in the supply chain, enabling growth and clarity for every business.
-            </div>
-            {/* <img
+          <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-8 tracking-tight text-left px-8 md:px-16 pt-12">
+            <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-500 bg-clip-text text-transparent">
+              Why Do We Exist
+            </span>
+          </h2>
+          <div className="text-xl md:text-2xl text-slate-600 mb-12 text-left px-8 md:px-16 font-normal max-w-4xl leading-relaxed">
+            We exist to empower retailers and distributors with modern, efficient, and elegant software solutions that bridge the gap in the supply chain, enabling growth and clarity for every business.
+          </div>
+          {/* <img
               src={Earth}
               alt="Why Do We Exist"
               className="w-full object-cover shadow"
               style={{ height: "30rem " }}
             /> */}
-          </div>
-        </section>
+        </div>
+      </section>
 
-      {/* Sledge Software Solutions Section */}    
+      {/* Sledge Software Solutions Section */}
       <section
         ref={sledgeRef}
-        className="text-center px-6 py-28 md:py-40 max-w-5xl mx-auto relative overflow-hidden"
+        className="text-center px-6 py-32 md:py-48 max-w-6xl mx-auto relative overflow-hidden"
         style={{ minHeight: "60vh" }}
       >
         {/* Background reveal: white to image, revealed from bottom */}
@@ -284,22 +279,22 @@ export default function LandingPage() {
             transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)"
           }}
         >
-          <h1 className="text-7xl md:text-5xl font-bold leading-tight mb-6 tracking-tight ">
-            Sledge 
+          <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-4 tracking-tight text-slate-900">
+            Sledge
           </h1>
-          <h1 className="text-5xl md:text-6xl font-bold leading-tight mb-6 tracking-tight text-blue-400">
+          <h1 className="text-5xl md:text-7xl font-bold leading-tight mb-8 tracking-tight text-indigo-600">
             Software Solutions
           </h1>
-          <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">
-            A premium UI crafted with Eudoxus Sans for clarity, elegance, and modern appeal. Designed for forward-thinkers.
+          <p className="text-xl md:text-2xl text-slate-600 mb-12 max-w-3xl mx-auto leading-relaxed">
+            A premium UI crafted for clarity, elegance, and modern appeal. Designed for forward-thinkers.
           </p>
-          <button className="bg-black text-white px-8 py-3 text-lg rounded-full hover:bg-gray-900 transition-all">
+          <button className="bg-slate-900 text-white px-8 py-4 text-lg font-medium rounded-full hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
             Explore Now
           </button>
         </div>
       </section>
 
-      
+
       {/* --- Fullscreen Scrollable Rounded Rectangles Section --- */}
       <div>
         <ExploreSection />
@@ -307,121 +302,126 @@ export default function LandingPage() {
       {/* Modal Overlay */}
       {selectedFeature !== null && (
         <div
-          className="fixed inset-0 z-50 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setSelectedFeature(null)}
         >
           <div
-            className="relative bg-white rounded-2xl p-6 w-[90%] md:w-[150vh] h-[95vh] overflow-auto"
+            className="relative bg-white rounded-2xl p-8 w-full max-w-4xl max-h-[90vh] overflow-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()} // prevent close on inner click
           >
             {/* Close Button */}
             <button
               onClick={() => setSelectedFeature(null)}
-              className="absolute top-3 right-4 text-2xl text-gray-600 hover:text-red-500"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
             >
-              &times;
+              <span className="sr-only">Close</span>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
 
             {/* Image */}
             <img
               src={kiranaShop}
               alt={features[selectedFeature].title}
-              className="w-full h-64 object-cover rounded-lg mb-4"
+              className="w-full h-72 object-cover rounded-xl mb-8"
             />
 
             {/* Title & Description */}
-            <h2 className="text-3xl font-bold mb-2 text-blue-900">
+            <h2 className="text-3xl font-bold mb-4 text-slate-900">
               {features[selectedFeature].title}
             </h2>
-            <p className="text-gray-800 text-lg">{features[selectedFeature].desc}</p>
+            <p className="text-slate-600 text-lg leading-relaxed">{features[selectedFeature].desc}</p>
           </div>
         </div>
       )}
 
       {/* Section */}
       <section ref={whySledgeRef}
-        className="relative flex flex-col justify-center overflow-hidden p-0 m-0 mx-auto transition-all duration-[0ms] ease-linear bg-black pl-16 pr-16"
+        className="relative flex flex-col justify-center overflow-hidden p-0 m-0 mx-auto transition-all duration-[0ms] ease-linear bg-slate-950 px-8 md:px-16"
         style={{
           width: heroWidth,
-          height: "130vh",
+          height: "auto",
+          minHeight: "100vh",
           borderRadius: heroRadius,
-          background: "black",
+          background: "#020617", // slate-950
+          paddingTop: "8rem",
+          paddingBottom: "8rem",
           boxShadow: heroRadius !== "0px" ? "0 8px 32px 0 rgba(36,41,54,0.13)" : undefined,
         }}>
-        <h2 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-violet-500 to-teal-400 mb-16">
+        <h2 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-violet-400 to-blue-400 mb-20 text-center md:text-left">
           Why Choose Sledge
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 ">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
           {features.map((feature, idx) => (
             <div
               key={idx}
               onClick={() => setSelectedFeature(idx)}
-              className="bg-gray-900 text-white p-8 rounded-2xl shadow-xl cursor-pointer hover:scale-105 transition-transform flex flex-col justify-between h-[250px]"
+              className="bg-slate-900 border border-slate-800 p-8 rounded-2xl cursor-pointer hover:bg-slate-800 transition-all duration-300 group flex flex-col justify-between h-[280px]"
             >
               <div className="flex-grow flex items-end">
-                <h3 className="text-2xl font-semibold text-center w-full">
+                <h3 className="text-2xl font-semibold text-slate-100 group-hover:text-white transition-colors">
                   {feature.title}
                 </h3>
               </div>
-              <p className="mt-4 text-white text-base text-center">{feature.desc}</p>
+              <p className="mt-4 text-slate-400 text-base group-hover:text-slate-300 transition-colors leading-relaxed">{feature.desc}</p>
             </div>
           ))}
         </div>
       </section>
-      <section className="w-full bg-white py-24 px-8 md:px-32">
-  <h2 className="text-7xl md:text-5xl font-bold leading-tight mb-6 tracking-tight ">
-    Low On Margins, We Care Too
-  </h2>
+      <section className="w-full bg-white py-32 px-8 md:px-32">
+        <h2 className="text-4xl md:text-6xl font-bold leading-tight mb-16 tracking-tight text-slate-900 max-w-4xl">
+          Low On Margins, We Care Too
+        </h2>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 items-center">
-    {/* Left Content */}
-    <div>
-      <h1 className="text-8xl font-extrabold leading-none text-black mb-6 font-arial pl-12">99</h1>
-      <p className="text-2xl text-gray-700 leading-snug max-w-md">
-        the cost for all this because,<br />
-        <span className="font-semibold"> Sledge is never a burden.</span>
-      </p>
-    </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* Left Content */}
+          <div>
+            <h1 className="text-9xl font-bold leading-none text-slate-900 mb-8 tracking-tighter">99</h1>
+            <p className="text-2xl text-slate-600 leading-relaxed max-w-md">
+              the cost for all this because,<br />
+              <span className="font-semibold text-indigo-600"> Sledge is never a burden.</span>
+            </p>
+          </div>
 
-    {/* Right Image Placeholder */}
-    <div className="w-full h-[400px] md:h-[400px]  bg-gray-200 rounded-2xl flex justify-end">
-      {/* Replace src with your image */}
-      <img
-        src={Money}
-        alt="Sledge Pricing Visual"
-        className="object-cover w-full h-full justify-end rounded-2xl md:rounded-3xl"
-      />
-    </div>
-  </div>
-</section>
-{/* Subscribe to Newsletter Section */}
-<div className="w-full bg-white py-20 flex flex-col items-center justify-center text-center px-4">
-  <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Subscribe to Our Newsletter</h2>
-  <p className="text-lg text-gray-600 max-w-xl mb-8">
-    Stay updated with the latest features, business tools, and tips to grow with Sledge.
-  </p>
+          {/* Right Image Placeholder */}
+          <div className="w-full h-[400px] md:h-[500px] bg-slate-100 rounded-3xl overflow-hidden shadow-lg">
+            {/* Replace src with your image */}
+            <img
+              src={Money}
+              alt="Sledge Pricing Visual"
+              className="object-cover w-full h-full hover:scale-105 transition-transform duration-700"
+            />
+          </div>
+        </div>
+      </section>
+      {/* Subscribe to Newsletter Section */}
+      <div className="w-full bg-slate-50 py-32 flex flex-col items-center justify-center text-center px-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Subscribe to Our Newsletter</h2>
+        <p className="text-lg text-slate-600 max-w-xl mb-10">
+          Stay updated with the latest features, business tools, and tips to grow with Sledge.
+        </p>
 
-  <form className="w-1/3 max-w-md flex flex-col sm:flex-col gap-4">
-    <input
-      type="email"
-      placeholder="Name"
-      className="flex-1 px-6 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500"
-    />
-    <input
-      type="email"
-      placeholder="Email"
-      className="flex-1 px-6 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500"
-    />
-    
-  </form>
-  <button
-      type="submit"
-      className="px-6 py-4 bg-black text-white font-semibold rounded-full hover:opacity-90 transition duration-300 mt-2"
-    >
-      Subscribe
-    </button>
-</div>
+        <form className="w-full max-w-md flex flex-col gap-4">
+          <input
+            type="text"
+            placeholder="Name"
+            className="w-full px-6 py-4 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full px-6 py-4 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          />
+          <button
+            type="submit"
+            className="w-full px-6 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition duration-300 shadow-lg shadow-indigo-200"
+          >
+            Subscribe
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

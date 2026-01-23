@@ -2,7 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { PlaneLanding, Library, BanknoteArrowUp, Landmark, User, ScanBarcode, MoreVertical, LogOut } from "lucide-react";
-import {useAuth} from "../../components/AuthContext.js"; // Import the AuthContext
+import { useAuth } from "../../components/AuthContext.js"; // Import the AuthContext
 import API from "../../api"; // Adjust the import based on your project structure
 
 function TogglingPaymentIcon() {
@@ -37,30 +37,7 @@ export default function RetailerLayout() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeItemPosition, setActiveItemPosition] = useState({ left: 0, width: 0 });
   const [showMobileDropdown, setShowMobileDropdown] = useState(false);
-
-  useEffect(() => {
-    // Small delay to ensure DOM is ready
-    const timer = setTimeout(() => {
-      const activeIndex = navItems.findIndex(item => location.pathname === item.to);
-      if (activeIndex !== -1) {
-        const navElement = document.querySelector(`[data-nav-index="${activeIndex}"]`);
-        const navbarElement = document.querySelector('.fixed.top-0');
-        
-        if (navElement && navbarElement) {
-          const rect = navElement.getBoundingClientRect();
-          const navbarRect = navbarElement.getBoundingClientRect();
-          setActiveItemPosition({
-            left: rect.left - navbarRect.left,
-            width: rect.width
-          });
-        }
-      }
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [location.pathname]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -79,7 +56,7 @@ export default function RetailerLayout() {
     if (!window.confirm("Are you sure you want to logout? Unsaved cart items will be sent to backend.")) return;
 
     // Step 2: Send cart to backend before logout
-   
+
 
     // Step 3: Proceed with logout
     localStorage.removeItem("userInfo");
@@ -90,64 +67,70 @@ export default function RetailerLayout() {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-50 font-sans">
       {/* Top Navigation Bar */}
-      <div className="fixed top-0 left-0 w-full bg-white shadow-md z-50 relative">
-        <div className="p-2 md:p-4">
-          <div className="flex justify-between items-center nav-container">
+      <div className="fixed top-0 left-0 w-full bg-white border-b border-slate-200 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
             {/* Left Section: Logo and Navigation Items */}
-            <div className="flex items-center space-x-2 md:space-x-6 w-full md:w-auto">
+            <div className="flex items-center space-x-8 w-full md:w-auto">
               {/* Logo - Hidden on mobile */}
-              <img
-                src={process.env.PUBLIC_URL + "/logo192.png"}
-                alt="Logo"
-                className="hidden md:block h-12 w-auto cursor-pointer"
+              <div
+                className="hidden md:flex items-center cursor-pointer"
                 onClick={() => navigate("/")}
-              />
+              >
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
+                  <span className="text-white font-bold text-xl">S</span>
+                </div>
+                <span className="text-xl font-bold text-slate-900">Sledje</span>
+              </div>
 
               {/* Navigation Items */}
-              <div className="flex items-center justify-between md:justify-start space-x-1 md:space-x-6 w-full md:w-auto overflow-x-auto">
-                {navItems.map(({ name, to, icon: Icon }, index) => (
-                  <button
-                    key={index}
-                    data-nav-index={index}
-                    onClick={() => {
-                      navigate(to);
-                      setShowMobileDropdown(false);
-                    }}
-                    className={`flex flex-col md:flex-row items-center justify-center min-w-0 flex-shrink-0 text-blue-1000 text-xs md:text-lg font-bold transition px-2 md:px-4 py-2 rounded-md ${
-                      location.pathname === to ? "bg-blue-800 text-white" : "hover:text-blue-700 "
-                    }`}
-                  >
-                    {/* Show icon on mobile, hide on desktop */}
-                    <div className="block md:hidden mb-1">
-                      {typeof Icon === 'function' ? <Icon /> : <Icon className="w-4 h-4" />}
-                    </div>
-                    <span className="text-center">{name}</span>
-                  </button>
-                ))}
+              <div className="flex items-center justify-between md:justify-start space-x-1 md:space-x-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+                {navItems.map(({ name, to, icon: Icon }, index) => {
+                  const isActive = location.pathname === to;
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        navigate(to);
+                        setShowMobileDropdown(false);
+                      }}
+                      className={`flex flex-col md:flex-row items-center justify-center min-w-[4rem] md:min-w-0 px-3 py-2 rounded-lg transition-all duration-200 ${isActive
+                          ? "bg-indigo-50 text-indigo-600"
+                          : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                        }`}
+                    >
+                      {/* Show icon on mobile, hide on desktop */}
+                      <div className="block md:hidden mb-1">
+                        {typeof Icon === 'function' ? <Icon /> : <Icon className="w-5 h-5" />}
+                      </div>
+                      <span className={`text-xs md:text-sm font-medium ${isActive ? 'font-semibold' : ''}`}>{name}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Right Section: Logout Button - Hidden on mobile, but add mobile dropdown trigger */}
+            {/* Right Section: Logout Button - Hidden on mobile */}
             <div className="hidden md:block">
               <button
                 onClick={handleLogout}
-                className="bg-blue-600 text-white px-6 py-3 rounded-md shadow-md hover:bg-blue-700 transition"
+                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-slate-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               >
-                Logout
+                <LogOut className="w-4 h-4" />
+                <span>Logout</span>
               </button>
             </div>
-            
+
             {/* Mobile Dropdown Toggle Button */}
-            <div className="md:hidden mobile-dropdown-container relative">
+            <div className="md:hidden mobile-dropdown-container relative ml-2">
               <button
                 onClick={() => setShowMobileDropdown(!showMobileDropdown)}
-                className={`p-2 rounded-md transition-colors duration-200 ${
-                  showMobileDropdown 
-                    ? 'bg-blue-100 text-blue-700' 
-                    : 'text-blue-1000 hover:bg-gray-100'
-                }`}
+                className={`p-2 rounded-lg transition-colors duration-200 ${showMobileDropdown
+                    ? 'bg-slate-100 text-slate-900'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
                 aria-label="Menu"
               >
                 <MoreVertical className="w-5 h-5" />
@@ -155,11 +138,7 @@ export default function RetailerLayout() {
 
               {/* Mobile Dropdown Menu */}
               {showMobileDropdown && (
-                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  {/* Dropdown arrow */}
-                  <div className="absolute -top-2 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-white"></div>
-                  <div className="absolute -top-3 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-200"></div>
-                  
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50">
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 font-medium transition-colors duration-150 flex items-center space-x-2"
@@ -172,22 +151,10 @@ export default function RetailerLayout() {
             </div>
           </div>
         </div>
-        
-        {/* Bottom border line with gap for active item */}
-        <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600">
-          {/* Gap for active menu item */}
-          <div 
-            className="absolute top-0 h-0.5 bg-white transition-all duration-300 ease-in-out"
-            style={{
-              left: `${activeItemPosition.left - 10}px`,
-              width: `${activeItemPosition.width + 20}px`
-            }}
-          />
-        </div>
       </div>
 
       {/* Content Area */}
-      <div>
+      <div className="pt-16">
         <Outlet />
       </div>
     </div>

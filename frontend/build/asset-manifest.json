@@ -1,0 +1,28 @@
+{
+  "files": {
+    "main.css": "/static/css/main.8f1838a5.css",
+    "main.js": "/static/js/main.f300b723.js",
+    "static/media/HomeEarth.png": "/static/media/HomeEarth.8462955aa215f0fa44f1.png",
+    "static/media/N.png": "/static/media/N.172d46267cb1436b30ed.png",
+    "static/media/HomeMoney.png": "/static/media/HomeMoney.a88f4277a832151e2bc8.png",
+    "static/media/Home4.png": "/static/media/Home4.60a3fdb05d1301f039ea.png",
+    "static/media/Card1.png": "/static/media/Card1.4ce290c5a40a79c2dbc4.png",
+    "static/media/Card2.png": "/static/media/Card2.745b7d5821fe5cd69a24.png",
+    "static/media/Card4.png": "/static/media/Card4.5fc485363fb0a98215b7.png",
+    "static/media/Card3.png": "/static/media/Card3.9a7f2289b16a5158e5ed.png",
+    "static/media/945.png": "/static/media/945.1292c369cad41b2bc3e9.png",
+    "static/media/Home1.png": "/static/media/Home1.5ba7649f4c6a03cefcbb.png",
+    "static/media/Home3.png": "/static/media/Home3.56ae69e7fcacdd9e54f1.png",
+    "static/media/Home2.png": "/static/media/Home2.612781a0c0f8fb142cf3.png",
+    "static/media/navBarLogo1.png": "/static/media/navBarLogo1.c5aa5a897dc5c42ebf8e.png",
+    "static/media/G.jpeg": "/static/media/G.61f302d68028cb4bef67.jpeg",
+    "static/media/404.jpg": "/static/media/404.0d9ae452f41a48f1d0f0.jpg",
+    "index.html": "/index.html",
+    "main.8f1838a5.css.map": "/static/css/main.8f1838a5.css.map",
+    "main.f300b723.js.map": "/static/js/main.f300b723.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.8f1838a5.css",
+    "static/js/main.f300b723.js"
+  ]
+}
