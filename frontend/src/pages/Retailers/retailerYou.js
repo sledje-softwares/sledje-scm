@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { 
-  Trash, 
-  Check, 
-  CircleCheck, 
-  CreditCard, 
-  Phone, 
-  Plus, 
-  Search, 
-  Clock, 
-  CheckCircle, 
+import {
+  Trash,
+  Check,
+  CircleCheck,
+  CreditCard,
+  Phone,
+  Plus,
+  Search,
+  Clock,
+  CheckCircle,
   XCircle,
   UserPlus,
   Building2,
@@ -48,7 +48,7 @@ export default function RetailerYou() {
       image: Card1,
     },
     {
-      title: "Slege Billing Solutions", 
+      title: "Slege Billing Solutions",
       description: "1 Click and Done: No tangling in bills.",
       image: Card2,
     },
@@ -125,7 +125,7 @@ export default function RetailerYou() {
     }
   };
 
-   const fetchConnectionRequests = async () => {
+  const fetchConnectionRequests = async () => {
     try {
       setLoading(true);
       const response = await API.get('/connections/retailer/requests');
@@ -138,15 +138,15 @@ export default function RetailerYou() {
       setLoading(false);
     }
   };
-  
 
-   const searchDistributors = async (query) => {
+
+  const searchDistributors = async (query) => {
     if (!query.trim()) return;
-    
+
     try {
       setIsSearching(true);
       const response = await API.get(`/connections/search/distributors?companyName=${encodeURIComponent(query)}`);
-      
+
       // Fix: Don't call response.json() on axios response
       if (response.status === 200) {
         const results = response.data?.results || response.data || [];
@@ -160,14 +160,14 @@ export default function RetailerYou() {
     }
   };
 
-   const sendConnectionRequest = async (distributorId, message = '') => {
+  const sendConnectionRequest = async (distributorId, message = '') => {
     try {
       const response = await API.post('/connections/request', {
         retailer: user.id,
         distributorId,
         message
       });
-      
+
       // Fix: Don't call response.json() on axios response
       if (response.status === 200 || response.status === 201) {
         alert('Connection request sent successfully!');
@@ -184,19 +184,19 @@ export default function RetailerYou() {
 
   const removeConnection = async (distributorId) => {
     const actualRemove = async () => {
-       
-    try {
-      const response = await API.delete(`/connections/remove/${distributorId}`);
-      if (response.status === 200) {
-        alert('Connection removed successfully!');
-        fetchConnectedDistributors(); // Refresh connected distributors
-      } else {
-        alert(response.data?.message || 'Failed to remove connection');
+
+      try {
+        const response = await API.delete(`/connections/remove/${distributorId}`);
+        if (response.status === 200) {
+          alert('Connection removed successfully!');
+          fetchConnectedDistributors(); // Refresh connected distributors
+        } else {
+          alert(response.data?.message || 'Failed to remove connection');
+        }
+      } catch (error) {
+        console.error('Error removing connection:', error);
+        alert('Error removing connection');
       }
-    } catch (error) {
-      console.error('Error removing connection:', error);
-      alert('Error removing connection');
-    }
     };
 
     showConfirmation('Are you sure you want to remove this connection?', actualRemove);
@@ -230,26 +230,26 @@ export default function RetailerYou() {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-yellow-600" />;
+        return <Clock className="w-4 h-4 text-amber-600" />;
       case 'approved':
-        return <CheckCircle className="w-4 h-4 text-green-600" />;
+        return <CheckCircle className="w-4 h-4 text-emerald-600" />;
       case 'rejected':
         return <XCircle className="w-4 h-4 text-red-600" />;
       default:
-        return <Clock className="w-4 h-4 text-gray-600" />;
+        return <Clock className="w-4 h-4 text-slate-600" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'approved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'rejected':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 border-red-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
 
@@ -271,340 +271,349 @@ export default function RetailerYou() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 md:p-6 flex flex-col lg:flex-row gap-3 md:gap-6">
-      {/* Your Account Section */}
-      <div className="flex-1 bg-white rounded-lg shadow-lg p-4 md:p-6">
-        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 text-gray-800">Your Account</h1>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
+      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6">
+        {/* Your Account Section */}
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <h1 className="text-2xl font-bold mb-6 text-slate-900">Your Account</h1>
 
-        {/* Account Areas */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-10">
-          <div className="flex items-center bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <CircleCheck className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
+          {/* Account Areas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            <div className="flex items-center bg-white border border-slate-200 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
+                <CircleCheck className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">Orders History</h3>
+                <p className="text-sm text-slate-500">View and manage past orders</p>
+              </div>
             </div>
-            <div className="ml-3 md:ml-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-800">Your Orders History</h3>
-              <p className="text-xs md:text-sm text-gray-600">View and manage your past orders.</p>
+
+            <div className="flex items-center bg-white border border-slate-200 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-amber-100 transition-colors">
+                <Check className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">Login & Security</h3>
+                <p className="text-sm text-slate-500">Update password and settings</p>
+              </div>
+            </div>
+
+            <div className="flex items-center bg-white border border-slate-200 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-red-100 transition-colors">
+                <Trash className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">Your Addresses</h3>
+                <p className="text-sm text-slate-500">Manage delivery addresses</p>
+              </div>
+            </div>
+
+            <div className="flex items-center bg-white border border-slate-200 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer group">
+              <div className="w-12 h-12 bg-purple-50 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
+                <CreditCard className="w-6 h-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">Cards & Payments</h3>
+                <p className="text-sm text-slate-500">Manage payment methods</p>
+              </div>
+            </div>
+
+            <div className="flex items-center bg-white border border-slate-200 p-4 rounded-xl hover:shadow-md transition-shadow cursor-pointer group sm:col-span-2">
+              <div className="w-12 h-12 bg-pink-50 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-pink-100 transition-colors">
+                <Phone className="w-6 h-6 text-pink-600" />
+              </div>
+              <div className="ml-4">
+                <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">Contact Us</h3>
+                <p className="text-sm text-slate-500">Reach out for support or inquiries</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <Check className="w-6 h-6 md:w-8 md:h-8 text-yellow-600" />
-            </div>
-            <div className="ml-3 md:ml-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-800">Login and Security</h3>
-              <p className="text-xs md:text-sm text-gray-600">Update your password and account settings.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <Trash className="w-6 h-6 md:w-8 md:h-8 text-red-600" />
-            </div>
-            <div className="ml-3 md:ml-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-800">Your Addresses</h3>
-              <p className="text-xs md:text-sm text-gray-600">Manage your saved delivery addresses.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <CreditCard className="w-6 h-6 md:w-8 md:h-8 text-purple-600" />
-            </div>
-            <div className="ml-3 md:ml-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-800">Your Cards and Payments</h3>
-              <p className="text-xs md:text-sm text-gray-600">Manage your saved cards and payment methods.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow sm:col-span-2">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <Phone className="w-6 h-6 md:w-8 md:h-8 text-pink-600" />
-            </div>
-            <div className="ml-3 md:ml-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-800">Contact Us</h3>
-              <p className="text-xs md:text-sm text-gray-600">Reach out to us for support or inquiries.</p>
+          {/* Carousel Section */}
+          <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Discover More with Sledje</h2>
+            <div
+              ref={carouselRef}
+              className="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth pb-2"
+              style={{ scrollBehavior: "smooth" }}
+            >
+              {carouselItems.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="min-w-[80%] sm:min-w-[45%] bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex-shrink-0"
+                >
+                  <div className="aspect-video bg-slate-100 rounded-lg mb-3 overflow-hidden">
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 mb-1">{item.title}</h3>
+                  <p className="text-sm text-slate-500">{item.description}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Carousel Section */}
-        <div className="bg-white border border-gray-200 p-3 md:p-4 rounded-lg shadow-md">
-          <h2 className="text-lg md:text-xl font-bold text-gray-800 mb-3 md:mb-4">Discover More with Sledje</h2>
-          <div
-            ref={carouselRef}
-            className="flex gap-3 md:gap-4 overflow-x-auto no-scrollbar scroll-smooth"
-            style={{ scrollBehavior: "smooth" }}
-          >
-            {carouselItems.map((item, idx) => (
-              <div
-                key={idx}
-                className="min-w-[80%] sm:min-w-[45%] max-w-[80%] sm:max-w-[45%] bg-blue-100 rounded-xl shadow-md p-3 md:p-4 flex-shrink-0"
+        {/* Personal Details Section */}
+        <div className="w-full lg:w-2/5 bg-white rounded-xl shadow-sm border border-slate-200 p-6 h-fit">
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Personal Details</h2>
+          <div className="flex flex-col sm:flex-row items-center sm:items-start bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+            <div className="w-20 h-20 bg-slate-200 rounded-full overflow-hidden flex-shrink-0 mb-3 sm:mb-0 border-2 border-white shadow-sm">
+              <img src={GunjanImage} alt="Owner" className="w-full h-full object-cover" />
+            </div>
+            <div className="sm:ml-4 text-center sm:text-left">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {retailerProfile ? retailerProfile.retailers.ownerName : "Loading..."}
+              </h3>
+              <p className="text-sm text-slate-600 font-medium">
+                {retailerProfile ? retailerProfile.retailers.businessName : ""}
+              </p>
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
+                  <span className="w-16 text-slate-400">Email:</span>
+                  {retailerProfile ? retailerProfile.users.email : ""}
+                </p>
+                <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
+                  <span className="w-16 text-slate-400">Phone:</span>
+                  {retailerProfile ? retailerProfile.users.phone : ""}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Distributor Management Section */}
+          <div className="bg-white rounded-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Distributor Network</h3>
+
+            {/* Tab Navigation */}
+            <div className="flex mb-4 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('distributors')}
+                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 ${activeTab === 'distributors'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="h-24 md:h-28 w-full object-cover rounded-lg mb-2 md:mb-3"
-                />
-                <h3 className="text-base md:text-lg font-bold text-blue-800">{item.title}</h3>
-                <p className="text-xs md:text-sm text-blue-700">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+                <Building2 className="w-4 h-4 inline mr-2" />
+                Connected ({connectedDistributors.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('requests')}
+                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 ${activeTab === 'requests'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                  }`}
+              >
+                <Clock className="w-4 h-4 inline mr-2" />
+                Requests ({connectionRequests.length})
+              </button>
+            </div>
 
-      {/* Personal Details Section */}
-      <div className="w-full lg:w-2/5 bg-white rounded-lg shadow-lg p-4 md:p-6">
-        <h2 className="text-xl md:text-2xl font-bold text-blue-800 mb-3 md:mb-4">Personal Details</h2>
-        <div className="flex flex-col sm:flex-row items-center sm:items-start bg-blue-50 p-3 md:p-4 rounded-lg shadow mb-4 md:mb-6">
-          <div className="w-20 h-20 md:w-24 md:h-24 bg-gray-300 rounded-full overflow-hidden flex-shrink-0 mb-3 sm:mb-0">
-            <img src={GunjanImage} alt="Owner" className="w-full h-full object-cover" />
-          </div>
-          <div className="sm:ml-4 text-center sm:text-left">
-            <h3 className="text-lg md:text-xl font-semibold text-blue-800">
-              {retailerProfile ? retailerProfile.retailers.ownerName : "Loading..."}
-            </h3>
-            <p className="text-sm md:text-base text-gray-600">
-              Owner : {retailerProfile ? retailerProfile.retailers.businessName : ""}
-            </p>
-            <p className="text-sm md:text-base text-gray-600 break-all sm:break-normal">
-              Email: {retailerProfile ? retailerProfile.users.email : ""}
-            </p>
-            <p className="text-sm md:text-base text-gray-600">
-              Phone: {retailerProfile ? retailerProfile.users.phone : ""}
-            </p>
-          </div>
-        </div>
-
-        {/* Distributor Management Section */}
-        <div className="bg-blue-50 p-3 md:p-4 rounded-lg shadow">
-          {/* Tab Navigation */}
-          <div className="flex mb-4 bg-white rounded-lg p-1">
+            {/* Add New Distributor Button */}
             <button
-              onClick={() => setActiveTab('distributors')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'distributors'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-blue-600 hover:bg-blue-100'
-              }`}
+              onClick={() => setShowSearchModal(true)}
+              className="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center font-medium shadow-sm"
             >
-              <Building2 className="w-4 h-4 inline mr-1" />
-              Connected ({connectedDistributors.length})
+              <Plus className="w-4 h-4 mr-2" />
+              Find New Distributors
             </button>
-            <button
-              onClick={() => setActiveTab('requests')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'requests'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-blue-600 hover:bg-blue-100'
-              }`}
-            >
-              <Clock className="w-4 h-4 inline mr-1" />
-              Requests ({connectionRequests.length})
-            </button>
-          </div>
 
-          {/* Add New Distributor Button */}
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="w-full mb-4 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Find New Distributors
-          </button>
-
-          {/* Content based on active tab */}
-          <div className="max-h-80 overflow-y-auto">
-            {activeTab === 'distributors' && (
-              <div>
-                <h3 className="text-base md:text-lg font-semibold text-blue-800 mb-2">Connected Distributors</h3>
-                {loading ? (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                  </div>
-                ) : connectedDistributors.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Building2 className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                    <p>No connected distributors yet</p>
-                    <p className="text-sm">Start by finding and connecting with distributors</p>
-                  </div>
-                ) : (
-                  connectedDistributors.map((distributor) => (
-                    <div
-                      key={distributor.id}
-                      className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-3 rounded-lg shadow mb-2 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex-1 mb-2 sm:mb-0">
-                        <p className="text-blue-800 font-medium text-sm md:text-base">{distributor.companyName}</p>
-                        <p className="text-gray-600 text-xs md:text-sm">{distributor.ownerName}</p>
-                        <p className="text-gray-600 text-xs">{distributor.phone}</p>
-                        <p className="text-gray-600 text-xs">{distributor.location}</p>
-                      </div>
-                      <button
-                        onClick={() => removeConnection(distributor.id)}
-                        className="bg-red-100 hover:bg-red-200 text-red-600 px-3 py-1 rounded text-xs transition-colors"
+            {/* Content based on active tab */}
+            <div className="max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+              {activeTab === 'distributors' && (
+                <div className="space-y-3">
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mx-auto"></div>
+                    </div>
+                  ) : connectedDistributors.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                      <Building2 className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                      <p className="text-slate-900 font-medium">No connections yet</p>
+                      <p className="text-xs text-slate-500 mt-1">Start by finding distributors</p>
+                    </div>
+                  ) : (
+                    connectedDistributors.map((distributor) => (
+                      <div
+                        key={distributor.id}
+                        className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-4 rounded-xl border border-slate-200 hover:border-indigo-200 hover:shadow-sm transition-all group"
                       >
-                        Remove
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {activeTab === 'requests' && (
-              <div>
-                <h3 className="text-base md:text-lg font-semibold text-blue-800 mb-2">Connection Requests</h3>
-                {loading ? (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                  </div>
-                ) : connectionRequests.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Clock className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                    <p>No connection requests</p>
-                  </div>
-                ) : (
-                  connectionRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="bg-white p-3 rounded-lg shadow mb-2 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <p className="text-blue-800 font-medium text-sm md:text-base">
-                            {request.distributor.companyName}
-                          </p>
-                          <p className="text-gray-600 text-xs md:text-sm">{request.distributor.ownerName}</p>
-                          <p className="text-gray-600 text-xs">{request.distributor.phone}</p>
+                        <div className="flex-1 mb-2 sm:mb-0">
+                          <p className="text-slate-900 font-semibold text-sm">{distributor.companyName}</p>
+                          <p className="text-slate-500 text-xs mt-0.5">{distributor.ownerName} • {distributor.location}</p>
+                          <p className="text-slate-400 text-xs mt-0.5">{distributor.phone}</p>
                         </div>
-                        <div className="flex items-center">
-                          {getStatusIcon(request.status)}
-                          <span className={`ml-1 px-2 py-1 rounded-full text-xs ${getStatusColor(request.status)}`}>
-                            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                          </span>
-                        </div>
+                        <button
+                          onClick={() => removeConnection(distributor.id)}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          Remove
+                        </button>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Sent: {new Date(request.createdAt).toLocaleDateString()}
-                      </p>
-                      {request.message && (
-                        <p className="text-xs text-gray-600 mt-1 italic">"{request.message}"</p>
-                      )}
-                      {request.rejectionReason && (
-                        <p className="text-xs text-red-600 mt-1">Reason: {request.rejectionReason}</p>
-                      )}
+                    ))
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'requests' && (
+                <div className="space-y-3">
+                  {loading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mx-auto"></div>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
+                  ) : connectionRequests.length === 0 ? (
+                    <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                      <Clock className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                      <p className="text-slate-900 font-medium">No pending requests</p>
+                    </div>
+                  ) : (
+                    connectionRequests.map((request) => (
+                      <div
+                        key={request.id}
+                        className="bg-white p-4 rounded-xl border border-slate-200 hover:shadow-sm transition-all"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <p className="text-slate-900 font-semibold text-sm">
+                              {request.distributor.companyName}
+                            </p>
+                            <p className="text-slate-500 text-xs mt-0.5">{request.distributor.ownerName}</p>
+                          </div>
+                          <div className={`flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(request.status)}`}>
+                            {getStatusIcon(request.status)}
+                            <span className="ml-1 capitalize">{request.status}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-50">
+                          <p className="text-xs text-slate-400">
+                            Sent: {new Date(request.createdAt).toLocaleDateString()}
+                          </p>
+                          {request.message && (
+                            <p className="text-xs text-slate-500 italic max-w-[150px] truncate">"{request.message}"</p>
+                          )}
+                        </div>
+                        {request.rejectionReason && (
+                          <p className="text-xs text-red-600 mt-2 bg-red-50 p-2 rounded-lg">Reason: {request.rejectionReason}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Search Modal */}
       {showSearchModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-blue-800">Find Distributors</h3>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-slate-900">Find Distributors</h3>
               <button
                 onClick={() => setShowSearchModal(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
               >
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
 
             {/* Search Bar */}
-            <div className="relative mb-4">
+            <div className="relative mb-6">
               <input
                 type="text"
                 placeholder="Search by company name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchDistributors(searchQuery)}
-                className="w-full p-3 border border-gray-300 rounded-lg pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full p-3 pl-10 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
-              <Search className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
               <button
                 onClick={() => searchDistributors(searchQuery)}
                 disabled={isSearching}
-                className="absolute right-2 top-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-sm disabled:opacity-50"
+                className="absolute right-2 top-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
               >
                 {isSearching ? 'Searching...' : 'Search'}
               </button>
             </div>
 
             {/* Search Results */}
-            <div className="max-h-96 overflow-y-auto">
+            <div className="space-y-4">
               {searchQuery.trim() === "" && suggestedDistributors.length === 0 && (
-                <div className="text-center text-gray-500 py-8">
-                  <p>No distributor suggestions found for your area or business type.</p>
+                <div className="text-center text-slate-500 py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                  <p>No distributor suggestions found for your area.</p>
                 </div>
               )}
 
               {searchQuery.trim() === "" && suggestedDistributors.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-blue-700 mb-2">Distributors in your area or business type</h4>
-                  {suggestedDistributors.map((distributor) => (
-                    <div key={distributor.id} className="bg-gray-50 p-4 rounded-lg mb-3 hover:bg-gray-100 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-blue-800">{distributor.companyName}</h4>
-                          <p className="text-sm text-gray-600">{distributor.ownerName}</p>
-                          <p className="text-sm text-gray-600">{distributor.phone}</p>
-                          <p className="text-sm text-gray-600">{distributor.location}</p>
-                          <p className="text-sm text-gray-600">{distributor.businessType}</p>
-                        </div>
-                        {!distributor.requestStatus && !distributor.connectionStatus ? (
+                  <h4 className="font-semibold text-slate-900 mb-3 flex items-center">
+                    <Building2 className="w-4 h-4 mr-2 text-indigo-600" />
+                    Suggested Distributors
+                  </h4>
+                  <div className="space-y-3">
+                    {suggestedDistributors.map((distributor) => (
+                      <div key={distributor.id} className="bg-white border border-slate-200 p-4 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-slate-900">{distributor.companyName}</h4>
+                            <p className="text-sm text-slate-600 mt-0.5">{distributor.ownerName} • {distributor.businessType}</p>
+                            <p className="text-xs text-slate-500 mt-1">{distributor.location}</p>
+                          </div>
+                          {!distributor.requestStatus && !distributor.connectionStatus ? (
                             <button
-                                onClick={() => sendConnectionRequest(distributor.id)}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                                          <UserPlus className="w-4 h-4 mr-1" /> Connect
-                                            </button>
-                                            ) : (
-  <span className="px-4 py-2 rounded-lg text-sm bg-gray-200 text-gray-600 font-semibold flex items-center">    {distributor.connectionStatus && "Connected"}
-    {!distributor.connectionStatus && distributor.requestStatus === "pending" && "Requested"}
-    {!distributor.connectionStatus && distributor.requestStatus === "rejected" && "Rejected"}
-    {!distributor.connectionStatus && distributor.requestStatus === "approved" && "Approved"}
-  </span>
-)}
-
+                              onClick={() => sendConnectionRequest(distributor.id)}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
+                            >
+                              <UserPlus className="w-4 h-4 mr-1.5" /> Connect
+                            </button>
+                          ) : (
+                            <span className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${distributor.connectionStatus ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                distributor.requestStatus === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                  'bg-slate-50 text-slate-600 border-slate-100'
+                              }`}>
+                              {distributor.connectionStatus ? "Connected" :
+                                distributor.requestStatus === "pending" ? "Requested" :
+                                  distributor.requestStatus === "rejected" ? "Rejected" : "Approved"}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Existing search results rendering */}
               {searchResults.length === 0 && !isSearching && searchQuery.trim() !== "" ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Search className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                  <p>No distributors found for your search</p>
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                  <Search className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                  <p className="text-slate-900 font-medium">No distributors found</p>
+                  <p className="text-sm text-slate-500">Try a different search term</p>
                 </div>
               ) : (
                 searchResults.map((distributor) => (
                   <div
                     key={distributor.id}
-                    className="bg-gray-50 p-4 rounded-lg mb-3 hover:bg-gray-100 transition-colors"
+                    className="bg-white border border-slate-200 p-4 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all"
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <h4 className="font-medium text-blue-800">{distributor.companyName}</h4>
-                        <p className="text-sm text-gray-600">{distributor.ownerName}</p>
-                        <p className="text-sm text-gray-600">{distributor.phone}</p>
-                        <p className="text-sm text-gray-600">{distributor.location}</p>
-                        <p className="text-sm text-gray-600">{distributor.businessType}</p>
+                        <h4 className="font-semibold text-slate-900">{distributor.companyName}</h4>
+                        <p className="text-sm text-slate-600 mt-0.5">{distributor.ownerName} • {distributor.businessType}</p>
+                        <p className="text-xs text-slate-500 mt-1">{distributor.location}</p>
                       </div>
                       <button
                         onClick={() => sendConnectionRequest(distributor.id)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors flex items-center"
+                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
                       >
-                        <UserPlus className="w-4 h-4 mr-1" />
+                        <UserPlus className="w-4 h-4 mr-1.5" />
                         Connect
                       </button>
                     </div>
@@ -618,30 +627,30 @@ export default function RetailerYou() {
 
       {/* Custom Confirmation Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
             <div className="flex items-center mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 mr-4">
+              <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0 mr-4">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Confirm Action</h3>
-                <p className="text-sm text-gray-600">This action cannot be undone.</p>
+                <h3 className="text-lg font-bold text-slate-900">Confirm Action</h3>
+                <p className="text-sm text-slate-500">This action cannot be undone.</p>
               </div>
             </div>
-            
-            <p className="text-gray-700 mb-6">{confirmMessage}</p>
-            
+
+            <p className="text-slate-700 mb-6">{confirmMessage}</p>
+
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleCancel}
-                className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="px-4 py-2 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirm}
-                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors font-medium shadow-sm"
               >
                 Remove
               </button>
