@@ -40,6 +40,7 @@ These are forward-looking and record decisions, not current behaviour.
 | [14-simplification.md](14-simplification.md) | What to eliminate — NATS, consumers, the outbox pattern — and what to keep. |
 | [15-delivery-confirmation.md](15-delivery-confirmation.md) | The delivery agent as a third actor, and the retailer-held confirmation code. |
 | [16-offline-first.md](16-offline-first.md) | **Built.** The shop working without a network: client ULIDs, the append-only outbox, `POST /sync` and its exactly-once guarantee, conflict policy, and where skipping the stock ledger stops being safe. |
+| [17-deferred.md](17-deferred.md) | Work deliberately **not** built — khata (customer credit), day-close, the stock ledger — each with its reason and the trigger to build it. |
 
 ## If you're here to fix something
 
