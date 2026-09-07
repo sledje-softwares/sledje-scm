@@ -198,6 +198,8 @@ EVENTS stream created.
 | P1-14 | ✅ **FIXED** (delivery code now required and verified) `modules/orders/orders.service.js:completeOrder` | Accepts a delivery `code` and never validates it (`// For now, assume code matches.`). This is the trust boundary the billing chain fires on. |
 | P1-15 | ✅ **FIXED** `db/schema.js:416-418` | `product_bills.retailer_id/distributor_id/variant_id` have **no foreign keys and no unique constraint** on the triple, so find-or-create can race into duplicate bills that silently split a balance. |
 | P1-16 | ✅ **FIXED** `modules/connections/connections.service.js:respondToRequest` | Approve is two statements, not one transaction — a failure between them leaves an approved request with no connection row. |
+| P1-17 | ✅ **FIXED** `modules/sales/sales.repository.js:nextBillNumber` | Bill numbers were `count(*) + 1`. A lost-update race even online: two concurrent sales both read `count = 2`, both mint `BILL-00003`, and `uq_sale_bill` fails the second **after** the customer has paid. Replaced by a device-scoped scheme with no coordination (`bill-number.js`, [16-offline-first.md](16-offline-first.md)). |
+| P1-18 | ✅ **FIXED** `frontend/vite.config.js` (`workbox.globPatterns`) | A precache glob that swept in `public/%PUBLIC_URL%/` — whose screenshot filename contains a U+202F narrow no-break space and 500s — made the service worker fail to install on **every** load. Workbox's install is all-or-nothing, so the result was no offline app at all, silently, behind a working online one. |
 
 ---
 

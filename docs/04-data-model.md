@@ -257,6 +257,60 @@ NULL *(no FK)* · `variant_id` uuid NOT NULL *(no FK)* · `quantity` integer NOT
 
 ---
 
+## Sell side and offline sync
+
+> **Doc gap:** this page was written before the POS existed and still describes the schema as
+> of migration `0002`. The sell-side tables added by `0006_pos_delivery_agents_two_stage`
+> (`customers`, `retail_prices`, `sales`, `sale_items`, `sale_payments`, `product_bill_layers`,
+> `delivery_agents`, `deliveries`) are **not documented above**. `backend/src/db/schema.js`
+> remains the authority. What follows covers only what `0008_offline_sync` changed or added.
+
+### `sales` — `schema.js:822`
+**`id` varchar(26) PK — a ULID minted on the DEVICE, not the server.** `retailer_id` →
+`retailers.id` CASCADE · `customer_id` → `customers.id` *(null = walk-in)* · `bill_number` text
+NOT NULL · `device_id` varchar(26) *(null for sales made through `POST /sales`)* · `sold_at`
+timestamp NOT NULL *(the device clock at the counter — the business fact)* · `synced_at`
+timestamp *(when the server first heard about it)* · `subtotal` / `tax_total` / `discount` /
+`total` numeric(12,2) · `status` text default `'completed'` (`completed | voided`) ·
+`voided_at` timestamp · `void_reason` text · `created_at`.
+UNIQUE `uq_sale_bill` (retailer_id, bill_number) · INDEX `idx_sales_retailer_date`.
+
+`sale_items.id` / `sale_payments.id` and their `sale_id` FKs are `varchar(26)` for the same
+reason: the lines exist on the device before they exist here.
+
+### `sync_devices` — `schema.js`
+`id` varchar(26) PK *(device ULID, minted on the device)* · `retailer_id` → `retailers.id`
+CASCADE · `device_code` text NOT NULL *(the six-character bill-number prefix)* · `label` text ·
+`last_cursor` / `last_seen_at` / `created_at` timestamps.
+UNIQUE `uq_sync_device_code` (retailer_id, device_code) — the one thing a device cannot detect
+alone is another till of the same shop already using its prefix.
+
+### `sync_ops` — `schema.js`
+`id` uuid PK · `device_id` varchar(26) NOT NULL · `op_id` varchar(26) NOT NULL · `retailer_id`
+→ `retailers.id` CASCADE · `type` text NOT NULL (`sale.create | sale.void | price.set`) ·
+`op_at` timestamp *(device clock)* · `applied_at` timestamp · `result` jsonb.
+**UNIQUE `uq_sync_op` (device_id, op_id)** · INDEX `idx_sync_ops_retailer`.
+
+`uq_sync_op` is the exactly-once guarantee for the whole sync protocol: a replayed batch loses
+the race to insert and is acknowledged rather than reapplied. It is a database constraint and
+not an in-memory cache because a cache survives neither a restart, a second process, nor a
+deploy — and "the shop's sales were counted twice because we redeployed" is not a recoverable
+class of bug. Same discipline as `uq_product_delivery_order_bill`
+([02-product-billing.md](02-product-billing.md)).
+
+`result` stores what the *first* application returned, so a replay can be answered with the
+real outcome — notably the bill number, which the server may have had to disambiguate.
+
+### Changed by `0008`
+
+* `ledger.reference_id` `uuid` → **`text`**. It is a polymorphic reference (invoice, payment,
+  adjustment, **sale**) and cannot be narrower than the widest id it points at.
+* `product_bill_transactions` gains `idx_pbt_sale` on `(metadata ->> 'saleId')`, partial on
+  `metadata ? 'saleId'`. Accrual rows now carry their FIFO layer breakdown in `metadata`, and
+  a void reverses exactly those layers.
+
+---
+
 ## Infrastructure tables
 
 ### `outbox` — `schema.js:379`
@@ -288,13 +342,15 @@ table `event_dedup` with a column `message_id` — **neither exists**.
 
 ## Migrations
 
-`backend/drizzle/meta/_journal.json` — version 7, postgresql, three entries.
+`backend/drizzle/meta/_journal.json` — version 7, postgresql, nine entries.
 
 | Migration | Date | What it does |
 |---|---|---|
 | `0000_spotty_texas_twister` | 2025-11-20 | Baseline: 21 tables. `products` had `distributor_id`, `icon`, `reorder_level`; `product_variants` had `stock`, `selling_price`, `cost_price`, `expiry`. |
 | `0001_cool_lord_tyger` | 2025-11-26 | **The domain remodel.** Creates `distributorships`, `distributor_inventory`, `retailer_inventory`, `event_dedupe`, `notifications_log`. Moves products from distributor to distributorship. **Drops `product_variants.stock`, `.selling_price`, `.cost_price`, `.expiry`** — stock and pricing move to `distributor_inventory`. |
 | `0002_oval_doctor_octopus` | 2025-11-27 | Additive: `distributor_inventory.low_stock_threshold`, `distributors.profile_picture_url`, `retailers.profile_picture_url`, `product_variants.mrp`. |
+| `0003` … `0007` | — | Delivery codes, outbox error column, product-bill FKs and `uq_product_bill`, the POS / delivery-agent / two-stage-billing schema, and dropping `current_unit_cost`. **Not yet documented on this page.** |
+| `0008_offline_sync` | 2026-09-08 | Offline POS. `sales` / `sale_items` / `sale_payments` ids `uuid` → `varchar(26)` (client ULIDs, converted with `USING id::text` so existing rows keep their identity); `sales` gains `device_id`, `synced_at`, `voided_at`, `void_reason`; `ledger.reference_id` → `text`; creates `sync_devices` and `sync_ops`; adds `idx_pbt_sale`. Hand-adjusted from drizzle-kit's diff — the generator emitted the child FK's type change before the parent's, which Postgres rejects. |
 
 > ⚠️ Migration `0001` contains `ALTER TABLE "products" ADD COLUMN "distributorship_id" uuid
 > NOT NULL` with no default. **This fails on a non-empty `products` table.** A database with

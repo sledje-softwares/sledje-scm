@@ -1,6 +1,7 @@
 import {
   pgTable,
   text,
+  varchar,
   uuid,
   integer,
   timestamp,
@@ -375,9 +376,13 @@ export const ledger = pgTable("ledger", {
   orderId: uuid("order_id"),
   billId: uuid("productBillId"),
 
-  // generic reference type/id for any entity (invoice, payment, adjustment)
+  // Generic reference type/id for any entity (invoice, payment, adjustment,
+  // sale). Deliberately text, not uuid: a sale is identified by a
+  // client-generated ULID so it can exist before the server ever hears about
+  // it (docs/16-offline-first.md). A polymorphic reference column cannot be
+  // narrower than the widest id it has to hold.
   referenceType: text("reference_type"),
-  referenceId: uuid("reference_id"),
+  referenceId: text("reference_id"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -800,7 +805,13 @@ export const retailPrices = pgTable(
 export const sales = pgTable(
   "sales",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    // A ULID generated ON THE DEVICE, never by the server. A sale that cannot
+    // exist until the server answers is a sale that cannot be rung up with no
+    // network - which is the whole point (docs/16-offline-first.md).
+    // ULID over uuidv4 because it sorts by creation time: sync ordering and
+    // index locality come free.
+    // 26 holds a ULID; 36 so a pre-0008 uuid row survives the conversion
+    id: varchar("id", { length: 36 }).primaryKey(),
 
     retailerId: uuid("retailer_id")
       .notNull()
@@ -808,8 +819,24 @@ export const sales = pgTable(
 
     customerId: uuid("customer_id").references(() => customers.id), // null = walk-in
 
+    // "<DEVICECODE>-<counter>", e.g. "K7Q3M9-00042". Allocated on the device
+    // with no coordination; see docs/16-offline-first.md ("Bill numbers").
     billNumber: text("bill_number").notNull(),
+
+    // Which device rang this up. Null for sales made through POST /sales.
+    deviceId: varchar("device_id", { length: 26 }),
+
+    // soldAt is the DEVICE clock at the counter - the moment the customer
+    // paid. syncedAt is when the server first heard about it. They can be
+    // hours apart, and both matter: soldAt is the business fact, syncedAt is
+    // the operational one.
     soldAt: timestamp("sold_at").notNull().defaultNow(),
+    syncedAt: timestamp("synced_at"),
+
+    // Set by a sale.void op. Sales are immutable once written; a correction is
+    // a void plus a re-bill, never an edit (docs/16-offline-first.md).
+    voidedAt: timestamp("voided_at"),
+    voidReason: text("void_reason"),
 
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
     taxTotal: numeric("tax_total", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -827,9 +854,10 @@ export const sales = pgTable(
 );
 
 export const saleItems = pgTable("sale_items", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  // Client-generated too: the line exists on the device before it exists here.
+  id: varchar("id", { length: 36 }).primaryKey(),
 
-  saleId: uuid("sale_id")
+  saleId: varchar("sale_id", { length: 36 })
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
 
@@ -851,9 +879,9 @@ export const saleItems = pgTable("sale_items", {
 /* Split payment ("200 cash, 300 UPI") is the normal case at a counter,
    not an edge case - hence a table rather than a column. */
 export const salePayments = pgTable("sale_payments", {
-  id: uuid("id").defaultRandom().primaryKey(),
+  id: varchar("id", { length: 36 }).primaryKey(),
 
-  saleId: uuid("sale_id")
+  saleId: varchar("sale_id", { length: 36 })
     .notNull()
     .references(() => sales.id, { onDelete: "cascade" }),
 
@@ -916,5 +944,83 @@ export const deliveries = pgTable(
   (table) => [
     index("idx_deliveries_order").on(table.orderId),
     index("idx_deliveries_agent").on(table.agentId, table.status),
+  ]
+);
+
+/* ===============================
+  SYNC DEVICES
+  docs/16-offline-first.md
+
+  One row per till/phone that rings up sales. The device invents its own id
+  (a ULID) and its own bill-number prefix; this table is a registry the server
+  keeps for observability and for the ONE thing that genuinely needs the
+  server's view of the world - detecting a bill-number prefix collision
+  between two devices belonging to the same shop.
+  =============================== */
+
+export const syncDevices = pgTable(
+  "sync_devices",
+  {
+    id: varchar("id", { length: 26 }).primaryKey(), // device ULID, minted on the device
+
+    retailerId: uuid("retailer_id")
+      .notNull()
+      .references(() => retailers.id, { onDelete: "cascade" }),
+
+    // The bill-number prefix this device allocates under. Unique per retailer:
+    // if two devices ever mint the same six characters, the second one to sync
+    // is told and rotates, rather than both silently issuing the same bills.
+    deviceCode: text("device_code").notNull(),
+
+    label: text("label"), // "Front counter", "Rakesh's phone"
+
+    lastCursor: timestamp("last_cursor"),
+    lastSeenAt: timestamp("last_seen_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [unique("uq_sync_device_code").on(table.retailerId, table.deviceCode)]
+);
+
+/* ===============================
+  SYNC OPS  -  the exactly-once ledger
+  docs/16-offline-first.md
+
+  Every operation a device has ever submitted, keyed by (device_id, op_id).
+  The UNIQUE INDEX below is the entire idempotency mechanism: a replayed batch
+  loses the race to insert, and is therefore ACKNOWLEDGED rather than
+  reapplied. It is deliberately a database constraint and not an in-memory
+  cache - a cache does not survive a restart, a second process, or a deploy,
+  and "the shop's sales got counted twice because we redeployed" is not a
+  recoverable class of bug.
+
+  Same discipline as uq_product_delivery_order_bill (docs/02-product-billing.md).
+  =============================== */
+
+export const syncOps = pgTable(
+  "sync_ops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    deviceId: varchar("device_id", { length: 26 }).notNull(),
+    opId: varchar("op_id", { length: 26 }).notNull(),
+
+    retailerId: uuid("retailer_id").references(() => retailers.id, {
+      onDelete: "cascade",
+    }),
+
+    type: text("type").notNull(), // sale.create | sale.void | price.set
+
+    // The device's clock when the op was created, and ours when we applied it.
+    opAt: timestamp("op_at"),
+    appliedAt: timestamp("applied_at").defaultNow(),
+
+    // What the first application returned. Replays are answered from here, so
+    // a device that never saw the original response still learns the outcome
+    // (notably the bill number, which the server may have had to disambiguate).
+    result: jsonb("result"),
+  },
+  (table) => [
+    unique("uq_sync_op").on(table.deviceId, table.opId),
+    index("idx_sync_ops_retailer").on(table.retailerId, table.appliedAt),
   ]
 );

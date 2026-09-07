@@ -20,7 +20,7 @@ status code does not distinguish them.
 
 ## Mount table
 
-`backend/src/app.js:32-59`.
+`backend/src/app.js`.
 
 | Base path | Route file |
 |---|---|
@@ -39,6 +39,9 @@ status code does not distinguish them.
 | `/ledger` | `ledger.routes.js` |
 | `/api/distributorships` | `distributorships.routes.js` |
 | `/api/upload` | `upload.routes.js` |
+| `/deliveries` | `deliveries.routes.js` |
+| `/sales` | `sales.routes.js` |
+| `/sync` | `sync.routes.js` |
 
 > ⚠️ **Prefixing is inconsistent.** Most routers mount at the root; three
 > (`distributor-inventory`, `distributorships`, `upload`) sit under `/api`. Comments inside the
@@ -191,6 +194,69 @@ See [07-domain-flows.md](07-domain-flows.md) for the state machine.
 | GET | `/product-bills/:billId` | `getBill` |
 | GET | `/product-bills/:billId/transactions` | `getBillTransactions` |
 | POST | `/product-bills/:billId/pay` | `payBill` — body `{ amount, paymentMethod, note }` ⚠️ no clamp |
+
+## `/sales`
+
+`router.use(requireAuth, requireRole("retailer"))`.
+
+| Method | Path | Handler |
+|---|---|---|
+| GET | `/sales/sellable` | The shelf, priced for selling |
+| PUT | `/sales/price/:variantId` | Set what this shop charges — body `{ price }` |
+| POST | `/sales/` | Ring up a sale |
+| POST | `/sales/:saleId/void` | Void a sale — body `{ reason? }` |
+| GET | `/sales/` | `?limit=` |
+| GET | `/sales/:saleId` | One sale with items and payments |
+
+`POST /sales` accepts an optional client-generated `saleId` (a ULID), `billNumber`, `soldAt`,
+and per-line `itemId` / `unitPrice`. Given none of them it mints its own — so this route and
+`POST /sync` produce rows that are indistinguishable afterwards. Both run the same op appliers
+in `modules/sales/sales.service.js`.
+
+**There is no update route, by design.** A synced sale is immutable; the only correction is a
+void plus a re-bill ([16-offline-first.md](16-offline-first.md)).
+
+## `/sync`
+
+`router.use(requireAuth, requireRole("retailer"))`. One endpoint, `POST /sync`, and the only
+one an offline till talks to. See [16-offline-first.md](16-offline-first.md) for the reasoning.
+
+**Request**
+
+```jsonc
+{
+  "deviceId":    "01JQ…",              // ULID, minted on the device
+  "deviceCode":  "K7Q3M9",             // its bill-number prefix
+  "deviceLabel": "Front counter",      // optional
+  "cursor":      "2026-09-08T10:00:00.000Z",   // null on first sync
+  "ops": [ { "opId": "01JQ…", "type": "sale.create", "at": "…", "payload": { … } } ]
+}
+```
+
+Op types: `sale.create`, `sale.void`, `price.set`. Max 500 ops per batch.
+
+**Response** — always 200 when the batch was *looked at*, even if an op inside it failed; the
+per-op verdicts are in the body. A non-2xx means the whole envelope was rejected (bad auth,
+malformed request) and the device should resend it unchanged. Ops are idempotent, so resending
+is free.
+
+```jsonc
+{
+  "device":  { "id": "01JQ…", "deviceCode": "K7Q3M9", "codeConflict": false },
+  "results": [ { "opId": "01JQ…", "status": "applied|duplicate", "data": { … } } ],
+  "failed":  null,                     // or { opId, code, message }
+  "cursor":  "2026-09-08T10:05:00.000Z",
+  "changed": { "sellable": [ … ], "sales": [ … ] }
+}
+```
+
+| Behaviour | Rule |
+|---|---|
+| Idempotency | `UNIQUE (device_id, op_id)` on `sync_ops`, claimed inside the op's own transaction. A replay is **acknowledged, not reapplied**, and is answered with the first application's stored result. |
+| Ordering | Ops applied in the order given, each in its own transaction. |
+| Failure | **Stops at the first failure** and returns its `opId`. Ops before it stay applied; ops after it stay queued. The device must not skip past it. |
+| Pull | `changed` carries rows modified since `cursor` (everything, if `cursor` is null). The new cursor is taken *before* the read, so a concurrent write lands in the next pull rather than the gap. |
+| `codeConflict` | Another device of this shop already had this bill prefix. Adopt the returned `deviceCode` for **future** bills; queued ops keep the numbers they were written with. |
 
 ## `/invoices`
 

@@ -57,6 +57,13 @@
       "when": 1788792995183,
       "tag": "0007_drop_current_unit_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788812030070,
+      "tag": "0008_offline_sync",
+      "breakpoints": true
     }
   ]
 }

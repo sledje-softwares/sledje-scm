@@ -142,7 +142,7 @@ const ProductBillsRepo = {
    * Moves `amount` out of the consignment position and into money due.
    * Called once per consumed FIFO layer by the sales service.
    */
-  async recordSaleAccrual(tx, { productBillId, qty, amount, unitCost, saleId }) {
+  async recordSaleAccrual(tx, { productBillId, qty, amount, unitCost, saleId, layers = [] }) {
     await tx.execute(sql`
       UPDATE product_bills SET
         qty_sold                = qty_sold + ${qty},
@@ -162,8 +162,69 @@ const ProductBillsRepo = {
       unitPrice: unitCost,
       amount,
       type: "accrual",
-      metadata: { saleId },
+      // `layers` records WHICH FIFO layers this accrual consumed and by how
+      // much. Without it a void cannot be undone correctly: it would have to
+      // guess which layers to give the units back to, and guessing wrong
+      // silently changes what the retailer owes. Sales are immutable and
+      // corrections are new operations (docs/16-offline-first.md), so the
+      // reversal needs the original breakdown to still be on record.
+      metadata: { saleId, layers },
     });
+  },
+
+  /**
+   * Undo one accrual, because its sale was voided.
+   *
+   * The exact inverse of recordSaleAccrual: the units go back into the
+   * consignment position and stop being money due. Deliberately NOT clamped at
+   * zero on the due side - if the retailer already paid for units they have
+   * now voided, outstanding_balance SHOULD go negative. That is a credit they
+   * are owed, and clamping it away is destroying money.
+   */
+  async reverseSaleAccrual(tx, { productBillId, qty, amount, unitCost, saleId, layers = [] }) {
+    await tx.execute(sql`
+      UPDATE product_bills SET
+        qty_sold                = GREATEST(qty_sold - ${qty}, 0),
+        qty_received_unsold     = qty_received_unsold + ${qty},
+        amount_received_not_due = (amount_received_not_due::numeric + ${amount})::numeric,
+        total_amount_due        = (total_amount_due::numeric - ${amount})::numeric,
+        outstanding_balance     = (outstanding_balance::numeric - ${amount})::numeric,
+        last_transaction_date   = now(),
+        updated_at              = now()
+      WHERE id = ${productBillId}
+    `);
+
+    await tx.insert(productBillTransactions).values({
+      productBillId,
+      date: new Date(),
+      quantity: qty,
+      unitPrice: unitCost,
+      amount,
+      type: "reversal",
+      metadata: { saleId, layers, reverses: "accrual" },
+    });
+  },
+
+  /** Give units back to the FIFO layer they were taken from. */
+  async restoreLayer(tx, layerId, qty) {
+    await tx.execute(sql`
+      UPDATE product_bill_layers
+      SET qty_consumed = GREATEST(qty_consumed - ${qty}, 0)
+      WHERE id = ${layerId}
+    `);
+  },
+
+  /** The accrual rows one sale produced, for reversing it. */
+  async findAccrualsForSale(tx, saleId) {
+    return tx
+      .select()
+      .from(productBillTransactions)
+      .where(
+        and(
+          eq(productBillTransactions.type, "accrual"),
+          sql`${productBillTransactions.metadata} ->> 'saleId' = ${saleId}`
+        )
+      );
   },
 
   /**

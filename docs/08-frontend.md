@@ -15,6 +15,9 @@ No TypeScript.
 | Charts | `recharts` |
 | Icons | `lucide-react` |
 | Tests | `vitest` + jsdom |
+| Local database | `dexie` ^4 + `dexie-react-hooks` (`src/offline/`) |
+| Ids | `ulid` ^3 — sale, item, payment, op and device ids |
+| PWA / service worker | `vite-plugin-pwa` ^1.3 (`generateSW`) + `public/sledje-sync-sw.js` |
 
 Scripts: `dev` (= `start`), `build`, `preview`, `test` (`vitest run`), `test:watch`. **There is
 still no `lint` and no `format` script.**
@@ -214,7 +217,45 @@ re-commit or the artifact silently diverges. There is no CI to enforce it.
 
 Also committed: `frontend/public/%PUBLIC_URL%/` — a literal directory named `%PUBLIC_URL%`
 created long ago by an unsubstituted CRA template variable. Vite still copies it into
-`build/`; it is harmless cruft, safe to delete from `public/` and `build/`.
+`build/`.
+
+> ⚠️ **It was not harmless.** One file inside it is a screenshot whose name contains a U+202F
+> narrow no-break space, which the static server answers with a **500**. Workbox's precache
+> install is all-or-nothing, so that single entry made the service worker go `redundant` on
+> every load — no offline app at all, silently, behind a working online app. `vite.config.js`
+> now excludes the directory via `globIgnores`. Deleting it from `public/` and `build/` is
+> still the right cleanup.
+
+## The offline layer
+
+`src/offline/` — the POS writes here first and treats the network as a background chore. Full
+reasoning in [16-offline-first.md](16-offline-first.md).
+
+| File | Role |
+|---|---|
+| `db.js` | Dexie schema. `sales` / `saleItems` / `salePayments` / `shelf` / **`outbox`** / `acks` / `meta` |
+| `device.js` | The device's ULID and its six-character bill-number prefix, minted locally on first use; the per-till bill counter |
+| `pos.js` | `recordSale`, `voidSale`, `setPrice`, `shelfWithPending`, `pendingOpCount` |
+| `sync.js` | The flush loop: push the outbox, pull what changed |
+| `useOffline.js` | `useShelf`, `useRecentSales`, `useSyncStatus`, `useSyncLoop` — live queries |
+
+Three things here are load-bearing and easy to undo by accident:
+
+1. **The outbox is append-only.** Acknowledgements live in a *separate* `acks` table rather
+   than as a status column on the op, so "never mutate a queued op" means literally never.
+   Pending is derived — an outbox row with no ack — not a flag anyone has to clear.
+2. **`recordSale` writes the sale, its lines, its payments and the op in ONE Dexie
+   transaction.** A sale whose op did not get queued is a sale that will never reach the
+   server, with nothing left to notice it by.
+3. **On-hand is `serverQty − pendingOutflow`, never the cached number.** `shelf.qty` is the
+   server's last word on a mutable counter; showing it raw would display stock the shop has
+   already sold, and a later pull would appear to restore it.
+
+`retailerPOS.js` no longer calls the API at all: it reads `useShelf()` / `useRecentSales()` and
+writes through `recordSale()`, then fires `flushSoon()` and forgets about it. `SyncStatusBar.js`
+is the connection strip — offline is styled as *information*, not an error, because at a kirana
+counter it is the normal state.
+
 
 ## Testing
 

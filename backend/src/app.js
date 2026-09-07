@@ -24,6 +24,7 @@ import cartRoutes from "./api-gateway/routes/cart.routes.js";
 import uploadRoutes from "./api-gateway/routes/upload.routes.js";
 import deliveriesRoutes from "./api-gateway/routes/deliveries.routes.js";
 import salesRoutes from "./api-gateway/routes/sales.routes.js";
+import syncRoutes from "./api-gateway/routes/sync.routes.js";
 
 
 const app = express();
@@ -89,6 +90,9 @@ app.use("/api/distributorships", distributorshipRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/deliveries", deliveriesRoutes);
 app.use("/sales", salesRoutes);
+
+// The offline POS pushes batches of operations here (docs/16-offline-first.md).
+app.use("/sync", syncRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

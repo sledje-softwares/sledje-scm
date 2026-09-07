@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 // CRA -> Vite migration. Things this project needs that a stock Vite config
 // does not give you:
@@ -48,8 +49,61 @@ const cljFuzzyVite = {
   },
 };
 
+// The POS must load with no network (docs/16-offline-first.md). Workbox
+// precaches the app shell so the counter opens from cache; the outbox in
+// IndexedDB is what makes the sales survive.
+//
+// generateSW, not injectManifest: the only custom service-worker code needed
+// is a Background Sync doorbell, and importScripts carries it without pulling
+// the workbox runtime into application source. See public/sledje-sync-sw.js.
+const pwa = VitePWA({
+  registerType: "autoUpdate",
+  injectRegister: "auto",
+  manifest: false, // public/manifest.json is the manifest, and index.html links it
+  includeAssets: ["favicon.ico", "logo192.png", "logo512.png", "manifest.json"],
+  workbox: {
+    importScripts: ["/sledje-sync-sw.js"],
+    // Precache the SHELL, and only the shell.
+    //
+    // Two hard-won reasons this list is narrow rather than "**/*":
+    //
+    //  1. Workbox's install is ALL-OR-NOTHING. One entry that 404s or 500s and
+    //     the whole service worker goes `redundant` - which means no offline
+    //     app at all, silently, with a perfectly working online app to hide it.
+    //     That is exactly what happened here: public/%PUBLIC_URL%/ is CRA-era
+    //     junk holding a screenshot whose filename contains a U+202F narrow
+    //     no-break space, which the static server answers with a 500. Every
+    //     entry in this list is a way for the offline POS to stop existing, so
+    //     it holds only what the counter actually needs.
+    //  2. Weight. The marketing pages carry ~11 MB of PNGs. Precaching those
+    //     means a shopkeeper on a weak connection never finishes the install,
+    //     and an unfinished install is an uninstalled service worker.
+    globPatterns: [
+      "**/*.{js,css,html,ico,woff,woff2}",
+      "logo192.png",
+      "logo512.png",
+      "manifest.json",
+    ],
+    globIgnores: ["**/%PUBLIC_URL%/**", "**/assets/*.png"],
+    maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+    // Any in-app navigation resolves to the cached shell, so /retailer/pos
+    // opens on a device that has never had a connection this session.
+    navigateFallback: "/index.html",
+    // The API is never precached and never served from cache. A stale shelf is
+    // a cache we manage ourselves in IndexedDB, with a cursor and a merge
+    // policy; a stale HTTP response is a lie we cannot reason about.
+    navigateFallbackDenylist: [/^\/api/, /^\/sync/, /^\/sales/],
+    cleanupOutdatedCaches: true,
+  },
+  devOptions: {
+    // Off in dev: an aggressively caching service worker and HMR do not mix,
+    // and the offline path is verified against the production build anyway.
+    enabled: false,
+  },
+});
+
 export default defineConfig({
-  plugins: [react({ include: /\.(js|jsx)$/ }), cljFuzzyVite],
+  plugins: [react({ include: /\.(js|jsx)$/ }), cljFuzzyVite, pwa],
   server: { port: 3000 },
   build: {
     outDir: "build",

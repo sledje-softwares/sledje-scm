@@ -30,6 +30,16 @@ router.post("/", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/**
+ * Void a sale. The ONLY correction a sale gets - there is no edit path, by
+ * design (docs/16-offline-first.md). A correction is a void plus a re-bill.
+ */
+router.post("/:saleId/void", async (req, res, next) => {
+  try {
+    res.json(await SalesService.voidSale(req.user, req.params.saleId, req.body?.reason));
+  } catch (e) { next(e); }
+});
+
 router.get("/", async (req, res, next) => {
   try {
     res.json({ sales: await SalesService.listSales(req.user, { limit: Number(req.query.limit) || 50 }) });

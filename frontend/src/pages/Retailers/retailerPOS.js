@@ -1,10 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Plus, Minus, Trash2, ShoppingCart, Receipt, Tag, X, Check,
-  RefreshCw, ChevronDown, ChevronUp, IndianRupee,
+  RefreshCw, ChevronDown, ChevronUp, IndianRupee, CloudOff, AlertTriangle,
 } from "lucide-react";
-import API from "../../api";
 import CreateOrder from "./CreateOrder";
+import SyncStatusBar from "./SyncStatusBar";
+import { useShelf, useRecentSales, useSyncLoop, useReconciliationNeeded } from "../../offline/useOffline";
+import { recordSale, setPrice, saleDetail } from "../../offline/pos";
+import { flushSoon } from "../../offline/sync";
+
+// OFFLINE-FIRST (docs/16-offline-first.md)
+// ----------------------------------------
+// This screen never reads the network directly and never waits for it to
+// complete a sale. It reads the shelf out of IndexedDB and writes the sale
+// into IndexedDB, and the sync loop moves things to the server whenever it
+// can. The old version awaited POST /sales before it would even acknowledge
+// the customer - which is precisely the behaviour that sends a shopkeeper back
+// to the paper notebook the first time the line drops.
 
 const METHODS = ["cash", "upi", "card"];
 const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -24,8 +36,17 @@ const toCatalogue = (rows) =>
   }));
 
 export default function RetailerPOS() {
-  const [sellable, setSellable] = useState([]);
-  const [loading, setLoading] = useState(true);
+  useSyncLoop();
+
+  // Live from IndexedDB. `qty` here is already the server's cached number
+  // minus everything still sitting in the outbox, so the counter is never
+  // shown stock it has already sold.
+  const shelf = useShelf();
+  const history = useRecentSales(25);
+  const needsReconciliation = useReconciliationNeeded();
+
+  const sellable = shelf ?? [];
+  const loading = shelf === undefined;
   const [toast, setToast] = useState(null);
 
   const [cart, setCart] = useState([]); // { variantId, item, brand, quantity, rate, unit }
@@ -35,7 +56,6 @@ export default function RetailerPOS() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
-  const [history, setHistory] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,30 +64,9 @@ export default function RetailerPOS() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadSellable = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await API.get("/sales/sellable");
-      setSellable(res.data.items || []);
-    } catch {
-      flash("Could not load your shelf", "error");
-    }
-    setLoading(false);
-  }, []);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const res = await API.get("/sales?limit=25");
-      setHistory(res.data.sales || []);
-    } catch {
-      /* history is non-critical */
-    }
-  }, []);
-
-  useEffect(() => {
-    loadSellable();
-    loadHistory();
-  }, [loadSellable, loadHistory]);
+  // The shelf arrives through the same /sync pull that pushes sales, so there
+  // is no separate fetch to fail. A first run with no cursor gets everything.
+  const refresh = () => flushSoon();
 
   const catalogue = useMemo(() => toCatalogue(sellable), [sellable]);
   const stockFor = (variantId) =>
@@ -119,26 +118,40 @@ export default function RetailerPOS() {
 
   const overStock = cart.filter((c) => c.quantity > stockFor(c.variantId));
 
+  /**
+   * Complete the sale.
+   *
+   * Local write only. The bill number comes back from the device's own
+   * allocator, so the shopkeeper can read it out before the server has any
+   * idea this happened. flushSoon() is fire-and-forget: if it fails, the sale
+   * is already safe in the outbox and the sync loop will carry it.
+   */
   const completeSale = async () => {
     if (cart.length === 0) return flash("Add at least one item", "error");
     if (paid + 1e-6 < total) return flash("Payment doesn't cover the total", "error");
     setSubmitting(true);
     try {
-      const body = {
-        items: cart.map((c) => ({ variantId: c.variantId, quantity: c.quantity })),
+      const sale = await recordSale({
+        items: cart.map((c) => ({
+          variantId: c.variantId,
+          quantity: c.quantity,
+          // The price this device had cached at this moment is what the
+          // customer paid, and it stays authoritative for this sale.
+          unitPrice: c.rate,
+          taxRate: sellable.find((s) => s.variantId === c.variantId)?.gstRate || 0,
+        })),
         payments: payments
           .filter((p) => Number(p.amount) > 0)
           .map((p) => ({ method: p.method, amount: Number(p.amount) })),
         discount: Number(discount || 0),
-      };
-      if (customer.name || customer.phone) body.customer = { ...customer };
-      const res = await API.post("/sales", body);
-      flash(`Sale ${res.data.sale?.billNumber || ""} recorded`);
+        customer: customer.name || customer.phone ? { ...customer } : undefined,
+      });
+
+      flash(`Sale ${sale.billNumber} recorded`);
       resetSale();
-      loadSellable();
-      loadHistory();
+      flushSoon().catch(() => {});
     } catch (e) {
-      flash(e.response?.data?.error || "Sale failed", "error");
+      flash(e.message || "Sale failed", "error");
     }
     setSubmitting(false);
   };
@@ -170,12 +183,29 @@ export default function RetailerPOS() {
             <Tag className="w-4 h-4" /> Prices
           </button>
           <button
-            onClick={loadSellable}
+            onClick={refresh}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
+      </div>
+
+      <div className="mb-4 space-y-3">
+        <SyncStatusBar />
+        {needsReconciliation.length > 0 && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg border bg-orange-50 border-orange-200 text-orange-900 text-sm">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <p>
+              <span className="font-medium">
+                {needsReconciliation.length} sale(s) went through with stock you did not have on
+                record.
+              </span>{" "}
+              Usually another counter sold the same units first. Both sales stand — count the
+              shelf and correct your stock when you get a moment.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -276,13 +306,40 @@ export default function RetailerPOS() {
                       onClick={() => setExpanded((e) => ({ ...e, [s.id]: !e[s.id] }))}
                       className="w-full flex items-center justify-between text-left"
                     >
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{s.billNumber}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                          {s.billNumber}
+                          {s.status === "voided" && (
+                            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
+                              voided
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-slate-500">
                           {new Date(s.soldAt).toLocaleString("en-IN")}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
+                        {/* Whether the money is on the server yet. A shopkeeper
+                            should be able to see this per bill, not just in
+                            aggregate. */}
+                        {s.syncState === "pending" ? (
+                          <span
+                            data-testid="sale-pending"
+                            title="Saved on this device, not sent yet"
+                            className="flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5"
+                          >
+                            <CloudOff className="w-3 h-3" /> queued
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="sale-synced"
+                            title="Saved on the server"
+                            className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5"
+                          >
+                            <Check className="w-3 h-3" /> synced
+                          </span>
+                        )}
                         <span className="text-sm font-semibold text-slate-900">{money(s.total)}</span>
                         {expanded[s.id] ? (
                           <ChevronUp className="w-4 h-4 text-slate-400" />
@@ -434,7 +491,7 @@ export default function RetailerPOS() {
         <PriceModal
           rows={sellable}
           onClose={() => setShowPrices(false)}
-          onSaved={loadSellable}
+          onSaved={refresh}
           flash={flash}
         />
       )}
@@ -443,11 +500,11 @@ export default function RetailerPOS() {
 }
 
 function SaleDetail({ id }) {
+  // Straight out of IndexedDB. A bill the shopkeeper just wrote must be
+  // readable back with no network - that is what "the sale exists" means here.
   const [sale, setSale] = useState(null);
   useEffect(() => {
-    API.get(`/sales/${id}`)
-      .then((r) => setSale(r.data.sale))
-      .catch(() => setSale({ items: [], payments: [] }));
+    saleDetail(id).then((s) => setSale(s || { items: [], payments: [] }));
   }, [id]);
   if (!sale) return <p className="text-xs text-slate-400 mt-2">Loading…</p>;
   return (
@@ -455,7 +512,7 @@ function SaleDetail({ id }) {
       {(sale.items || []).map((it) => (
         <div key={it.id} className="flex justify-between text-slate-600">
           <span>
-            {it.productName || it.variantName} × {it.quantity}
+            {it.productName || it.variantName || it.variantId?.slice(0, 8)} × {it.quantity}
           </span>
           <span>{money(it.amount)}</span>
         </div>
@@ -472,6 +529,8 @@ function PriceModal({ rows, onClose, onSaved, flash }) {
   const [edits, setEdits] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Prices are queued like everything else. A shop that cannot re-price
+  // because the line is down is a shop that will price on paper instead.
   const save = async () => {
     const changed = Object.entries(edits).filter(
       ([variantId, v]) =>
@@ -481,16 +540,12 @@ function PriceModal({ rows, onClose, onSaved, flash }) {
     if (changed.length === 0) return onClose();
     setSaving(true);
     try {
-      await Promise.all(
-        changed.map(([variantId, v]) =>
-          API.put(`/sales/price/${variantId}`, { price: Number(v) })
-        )
-      );
+      for (const [variantId, v] of changed) await setPrice(variantId, Number(v));
       flash(`Updated ${changed.length} price(s)`);
       onSaved();
       onClose();
     } catch (e) {
-      flash(e.response?.data?.error || "Could not update prices", "error");
+      flash(e.message || "Could not update prices", "error");
     }
     setSaving(false);
   };

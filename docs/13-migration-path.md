@@ -16,7 +16,7 @@ flowchart LR
     S3 --> S4[Stage 4<br/>Payment allocation]
     S0 --> S5[Stage 5<br/>Collapse plumbing]
     S5 --> S6[Stage 6<br/>Identity + catalogue]
-    S2 --> S7[Stage 7<br/>Offline POS]
+    S2 --> S7[Stage 7<br/>Offline POS<br/>DONE]
 ```
 
 ---
@@ -189,15 +189,32 @@ for. Can start any time after Stage 0.
 
 ---
 
-## Stage 7 — Offline POS
+## Stage 7 — Offline POS — **done**
 
-Only after Stage 2's schema has settled.
+Built out of order: Stage 1 was skipped. See
+[16-offline-first.md](16-offline-first.md) for the full record.
 
-1. Move `sales.id` to client-generated ULIDs; add `client_id` and `synced_at`.
-2. Frontend becomes a PWA with IndexedDB and an append-only device outbox.
-3. Batch sync endpoint, idempotent on `(client_id, sale.id)`.
-4. Conflict policy: sales immutable once synced; corrections are new movements.
-5. Accept negative on-hand from stale-stock oversell and surface a reconciliation prompt.
+1. ✅ `sales.id` (and `sale_items.id`, `sale_payments.id`) are client-generated ULIDs;
+   `sales` gained `device_id`, `synced_at`, `voided_at`, `void_reason` — `0008_offline_sync`.
+   `client_id` was not needed: `device_id` on the sale plus `sync_ops.device_id` cover it.
+2. ✅ PWA with Dexie/IndexedDB and an append-only outbox — `frontend/src/offline/`,
+   `vite-plugin-pwa`.
+3. ✅ `POST /sync`, idempotent on **`(device_id, op_id)`** rather than `(client_id, sale.id)` —
+   op-level, so voids and price changes get the same guarantee sales do.
+4. ✅ Sales immutable once synced; the only correction is `sale.void` plus a re-bill.
+5. ✅ Negative on-hand is accepted and the POS surfaces a reconciliation prompt.
+
+**Stage 1 was NOT done first, and that has a stated limit.** Sync applies *operations*
+(`qty = qty - n`), never absolute state, which is what makes concurrent selling safe under a
+mutable counter. Anything that expresses a **level** rather than a change — stock-take above
+all — is not safe and must wait for `stock_movements`. Stage 1 is therefore now the gating
+dependency for stock-take and reconciliation, not for offline billing. The table in
+[16-offline-first.md](16-offline-first.md) ("Where the deferral stops being safe") is the
+authority.
+
+**Verification:** `backend/scripts/verify_offline_sync.js` (42 assertions against a real
+database, including docs/02's worked example driven through the sync path) plus a
+Playwright run in real Chrome (31 assertions, real service worker, network genuinely cut).
 
 **Closes:** critique §12.
 
