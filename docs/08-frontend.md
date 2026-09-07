@@ -2,26 +2,41 @@
 
 ## Toolchain
 
-**Create React App** (`react-scripts` 5.0.1). Not Vite, no TypeScript, no CRACO override.
+**Vite 6** + `@vitejs/plugin-react` (migrated from Create React App / `react-scripts` 5.0.1).
+No TypeScript.
 
 | Thing | Version / value |
 |---|---|
+| Build tool | `vite` ^6 (config: `frontend/vite.config.js`) |
 | React Router | `react-router-dom` ^7.4.1 |
-| Styling | Tailwind ^3.4.17 + `src/index.css` |
+| Styling | Tailwind ^3.4.17 + `src/index.css` (via `postcss.config.js`) |
 | HTTP | `axios` ^1.8.4 via `src/api.js` |
 | Animation | `framer-motion`, `gsap` |
 | Charts | `recharts` |
 | Icons | `lucide-react` |
+| Tests | `vitest` + jsdom |
 
-Scripts are raw `react-scripts` — `start`, `build`, `test`, `eject`. **There is no `lint` and
-no `format` script.**
+Scripts: `dev` (= `start`), `build`, `preview`, `test` (`vitest run`), `test:watch`. **There is
+still no `lint` and no `format` script.**
+
+`index.html` lives at the frontend root (Vite convention), not in `public/`. `public/` is
+served at `/`.
+
+**Migration notes** (`vite.config.js` documents each):
+
+- **45 `.js` files contain JSX.** esbuild rejects that by default; the config widens the
+  loader (`esbuild.loader: 'jsx'` + `optimizeDeps.esbuildOptions.loader`). Files were **not**
+  renamed to `.jsx`.
+- **`build.outDir` is pinned to `build/`** (Vite defaults to `dist/`) because the deployment
+  serves the committed `frontend/build` folder — see "The committed build" below.
+- **`clj-fuzzy`** (transitive dep of `words-to-numbers`, used by `posVoice.js`) is a
+  Closure-compiled blob that reads sloppy-mode top-level `this`; under Vite's strict ESM that
+  is `undefined` and the file throws on load, taking the whole app down. A one-line patch in
+  `vite.config.js` restores the global it expects, in both the dev pre-bundle and the build.
 
 **Installed but never imported:** `@react-oauth/google`, `@shadcn/ui`,
 `class-variance-authority`, `tailwind-merge`, `tailwind-variants`, `tw-animate-css`,
 `bcryptjs` (in a browser bundle), `@radix-ui/react-icons`.
-
-**Dead config:** `"proxy": "http://localhost:5000/"` in `package.json` is never used, because
-`src/api.js` sets an absolute `baseURL`.
 
 ## API layer
 
@@ -29,8 +44,7 @@ no `format` script.**
 
 ```js
 const API = axios.create({
-  baseURL: "https://sledjeweb-2.onrender.com/api",
-  //baseURL: "http://localhost:5000",
+  baseURL: import.meta.env.VITE_API_URL || "https://sledjeweb-2.onrender.com",
 });
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem("token");
@@ -41,9 +55,10 @@ API.interceptors.request.use((req) => {
 
 Three problems worth knowing before you touch anything:
 
-1. **The base URL is hardcoded to production.** Local development requires editing this file
-   and remembering not to commit it. `REACT_APP_API_URL` exists in `frontend/.env` and is
-   **referenced nowhere in `src/`**.
+1. **The base URL falls back to production.** `frontend/.env` sets
+   `VITE_API_URL=http://localhost:5000` for local dev (read as `import.meta.env.VITE_API_URL`;
+   the CRA-era `REACT_APP_API_URL` was renamed in the Vite migration). With no `.env` it
+   silently targets the deployed Render host.
 2. **The base URL ends in `/api`, but the backend mounts most routers at the root.** So
    `API.get("/products/get")` resolves to `.../api/products/get`, which does not exist on the
    backend. One of the two layers is wrong; see [05-api-reference.md](05-api-reference.md).
@@ -184,28 +199,32 @@ Unreferenced assets: `HomeTruck.png`, `Kirana_Shop.webp`, `trackingBackground.pn
 
 ## The committed build
 
-`frontend/build/` is a **tracked build artifact** — 31 files in git, including
-`static/js/main.f300b723.js` (1.4 MB) and `main.f300b723.js.map` (**5.4 MB source map that
-ships the full `src/` tree to anyone who loads the site**). `frontend/build` is not in
-`.gitignore`.
+`frontend/build/` is a **tracked build artifact** and `npm run build` (Vite) regenerates it
+in place — `vite.config.js` sets `build.outDir: 'build'` for exactly this reason. Vite emits
+hashed bundles under `build/assets/` (the CRA `build/static/{js,css,media}` layout is gone,
+as is `asset-manifest.json`). The JS bundle still ships a source map. `frontend/build` is not
+in `.gitignore`.
 
-It is currently **in sync** with `src` (both last touched by commit `af48354`). Note that
-filesystem mtimes are checkout times, so `find -newer` is not a valid staleness test here —
-compare `git log -- frontend/build` against `git log -- frontend/src`.
+Note that filesystem mtimes are checkout times, so `find -newer` is not a valid staleness
+test — compare `git log -- frontend/build` against `git log -- frontend/src`.
 
-Because `api.js` hardcodes the Render URL, this bundle is permanently pinned to production, and
-every source change requires a rebuild and re-commit or the artifact silently diverges. There
-is no CI to enforce it.
+Because `api.js` falls back to the Render URL when `VITE_API_URL` is unset, a build made
+without a `.env` is pinned to production, and every source change requires a rebuild and
+re-commit or the artifact silently diverges. There is no CI to enforce it.
 
 Also committed: `frontend/public/%PUBLIC_URL%/` — a literal directory named `%PUBLIC_URL%`
-created by an unsubstituted template variable, mirrored into `build/`.
+created long ago by an unsubstituted CRA template variable. Vite still copies it into
+`build/`; it is harmless cruft, safe to delete from `public/` and `build/`.
 
 ## Testing
 
-There is effectively none.
+Minimal, but `npm test` now runs and passes (Vitest + jsdom, migrated off the broken
+`react-scripts test` — see P4-5 in [10-known-issues.md](10-known-issues.md)).
 
-- `src/App.test.js` is verbatim CRA boilerplate asserting `getByText(/learn react/i)`. Nothing
-  renders that text, so **it fails**. It is the only test file in the repository.
-- `src/setupTests.js` is the stock `@testing-library/jest-dom` import. RTL and Jest are
-  installed and never exercised.
+- `src/App.test.js` is a single smoke test: it mounts `<App/>` (router + `AuthProvider` +
+  landing page) and asserts the branding logo rendered. A crash anywhere in that chain fails
+  it. It is the only test file in the repository.
+- `src/setupTests.js` loads `@testing-library/jest-dom` and shims three browser APIs jsdom
+  lacks (`matchMedia`, `IntersectionObserver`, `ResizeObserver`) that gsap and framer-motion
+  need at load/mount.
 - No error boundary, no loading/error shell around routes.

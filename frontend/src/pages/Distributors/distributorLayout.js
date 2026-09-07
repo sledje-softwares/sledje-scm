@@ -97,7 +97,7 @@ export default function Layout() {
             <div className="flex items-center space-x-2 md:space-x-8 w-full md:w-auto">
               {/* Logo - Hidden on mobile */}
               <img
-                src={process.env.PUBLIC_URL + "/logo192.png"}
+                src={import.meta.env.BASE_URL + "logo192.png"}
                 alt="Logo"
                 className="hidden md:block h-10 w-auto cursor-pointer"
                 onClick={() => navigate("/")}

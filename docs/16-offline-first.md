@@ -151,17 +151,14 @@ other does not work.
 | Background flush | **Background Sync API**, with a fallback | Chrome/Android support is good; Safari has none — fall back to flush on `online` + a 60 s timer + flush on app focus |
 | Server dedupe | Postgres unique index | Not an in-memory cache |
 
-### The CRA problem
+### The CRA problem — resolved
 
-The frontend is Create React App 5, which is **deprecated and unmaintained**, and its PWA
-support was removed from the default template. `vite-plugin-pwa` is the maintained path and
-gives Workbox integration, dev-mode service workers and auto-update prompts out of the box.
-
-**Recommendation: migrate to Vite before building the POS.** For this app it is roughly a
-day — CRA→Vite is mostly `index.html` relocation, `process.env.REACT_APP_*` →
-`import.meta.env.VITE_*`, and an `svgr` plugin. Doing it after the POS exists means porting a
-much larger surface, and `REACT_APP_API_URL` is dead anyway
-([08-frontend.md](08-frontend.md)), so the env wiring has to be touched regardless.
+The frontend **was** Create React App 5 (deprecated, unmaintained, PWA support removed from the
+template). **It is now Vite 6** ([08-frontend.md](08-frontend.md) → Toolchain): `index.html`
+relocated to the frontend root, `process.env.REACT_APP_API_URL` → `import.meta.env.VITE_API_URL`,
+JSX-in-`.js` handled via the esbuild loader (no file renames), `build.outDir` kept at `build/`,
+and `react-scripts test` → Vitest. No `svgr` plugin was needed (zero SVG imports). The next
+step here is adding **`vite-plugin-pwa`** for the Workbox service worker.
 
 ## The agent app is offline too
 
