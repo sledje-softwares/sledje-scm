@@ -1,5 +1,5 @@
 import InventoryRepo from "./inventory.repository.js";
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 
 export default {
   async getInventory(userId) {
@@ -36,6 +36,17 @@ export default {
     return created;
   },
 
+  /**
+   * DEPRECATED - retained only so a stale deployed client cannot corrupt stock.
+   *
+   * Delivery now applies every downstream effect (retailer shelf, distributor
+   * stock, product bill, ledger) inside one transaction in
+   * orders.service.js:completeOrder, gated on the delivery code. This endpoint
+   * used to add the order quantities to the shelf a second time, so calling
+   * both - as the UI did - double-counted every delivered item.
+   *
+   * It now reports the current shelf position without mutating anything.
+   */
   async updateInventoryAfterOrder(userId, orderId) {
     const retailer = await InventoryRepo.findRetailerIdByUserId(userId);
     if (!retailer) throw new Error("Retailer not found");
@@ -46,38 +57,16 @@ export default {
     if (order.status !== "completed")
       throw new Error("Order is not completed");
 
-    const items = await InventoryRepo.getOrderItems(orderId);
+    console.warn(
+      `[deprecated] POST /inventory/checkout called for order ${orderId}; ` +
+      `stock was already applied at delivery confirmation. No changes made.`
+    );
 
-    const updated = [];
-
-    for (const item of items) {
-      const existing = await InventoryRepo.findInventoryItem(retailer.id, item.variantId);
-
-      if (!existing) {
-        // create inventory entry if missing
-        const variant = await InventoryRepo.findVariantById(item.variantId);
-        const product = await InventoryRepo.findProduct(variant.productId);
-        const created = await InventoryRepo.createInventoryItem(retailer.id, variant, product);
-        existing = created;
-      }
-
-      // Add quantity to stock
-      const newStock = Number(existing.stock) + Number(item.quantity);
-
-      const updatedItem = await InventoryRepo.updateStock(
-        retailer.id,
-        item.variantId,
-        newStock
-      );
-
-      updated.push(updatedItem);
-    }
-
-    publishEvent("inventory.updated_after_order", {
-      retailerId: retailer.id,
-      updated
-    });
-
-    return updated;
+    return {
+      deprecated: true,
+      message:
+        "Inventory is applied automatically when the delivery code is confirmed. This endpoint no longer modifies stock.",
+      inventory: await InventoryRepo.getInventoryByRetailer(retailer.id),
+    };
   }
 };

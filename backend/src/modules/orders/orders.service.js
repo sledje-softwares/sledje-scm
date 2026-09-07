@@ -1,17 +1,30 @@
 import OrdersRepo from "./orders.repository.js";
+import DeliveryCodeRepo from "./delivery-code.repository.js";
+import DeliveriesRepo from "../deliveries/deliveries.repository.js";
+import DistributorInventoryRepo from "../inventory/distributor-inventory.repository.js";
+import RetailerInventoryRepo from "../inventory/inventory.repository.js";
+import ProductBillsRepo from "../product-bills/product-bills.repository.js";
+import {
+  notifyOrderCreated,
+  notifyOrderAccepted,
+  notifyOrderRejected,
+  notifyOrderDispatched,
+} from "../notifications/notifications.writer.js";
 import { db } from "../../config/postgres.js";
 import { v4 as uuidv4 } from "uuid";
+import { publishEvent } from "../../config/nats-streams.js";
+import { AppError } from "../../api-gateway/middlewares/error.middleware.js";
+import { generateCode, encryptCode, decryptCode } from "../../utils/deliveryCode.js";
 import {
   publishOrderCreated,
   publishOrderModified,
   publishOrderCancelled,
   publishOrderAccepted,
   publishOrderStatusUpdated,
-  publishOrderCompleted
 } from "./orders.events.js";
 
-import { productVariants, inventory } from "../../db/schema.js";
-import { eq } from "drizzle-orm";
+import { productVariants, inventory, distributorInventory } from "../../db/schema.js";
+import { eq, and, inArray } from "drizzle-orm";
 
 /**
  * Business logic:
@@ -24,6 +37,44 @@ import { eq } from "drizzle-orm";
  *
  * NOTE: All writes that must produce events insert a row into outbox inside the same transaction.
  */
+
+/**
+ * Resolve catalogue variants together with the price the given distributor sells them at.
+ *
+ * Prices do NOT live on product_variants (migration 0001 moved stock/pricing to
+ * distributor_inventory), so the selling price must be joined per distributor.
+ * Returns a map keyed by variant id.
+ */
+async function resolveVariantsForDistributor(variantIds, distributorId) {
+  if (!variantIds.length) return {};
+  const rows = await db
+    .select({
+      id: productVariants.id,
+      productId: productVariants.productId,
+      sku: productVariants.sku,
+      name: productVariants.name,
+      unit: productVariants.unit,
+      sellingPrice: distributorInventory.sellingPrice,
+    })
+    .from(productVariants)
+    .leftJoin(
+      distributorInventory,
+      and(
+        eq(distributorInventory.variantId, productVariants.id),
+        eq(distributorInventory.distributorId, distributorId)
+      )
+    )
+    .where(inArray(productVariants.id, variantIds));
+  return Object.fromEntries(rows.map((v) => [v.id, v]));
+}
+
+function priceFor(item, variant) {
+  const price = item.sellingPrice ?? variant.sellingPrice;
+  if (price === null || price === undefined) {
+    throw new Error(`Variant not stocked by this distributor: ${variant.id}`);
+  }
+  return Number(price);
+}
 
 function computeTotals(items) {
   // items: [{ variantId, quantity, unit }]
@@ -56,9 +107,7 @@ export default {
     const variantIds = (payload.items || []).map(i => i.variantId);
     if (!variantIds.length) throw new Error("No items provided");
 
-    const variants = await db.select().from(productVariants).where(productVariants.id.in(variantIds));
-    // map variants by id
-    const variantMap = Object.fromEntries(variants.map(v => [v.id, v]));
+    const variantMap = await resolveVariantsForDistributor(variantIds, distributorId);
 
     // enrich incoming items with price, name
     const enriched = payload.items.map(it => {
@@ -72,7 +121,7 @@ export default {
         variantName: v.name,
         quantity: Number(it.quantity || 0),
         unit: it.unit || v.unit,
-        sellingPrice: Number(it.sellingPrice ?? v.sellingPrice),
+        sellingPrice: priceFor(it, v),
       };
     });
 
@@ -91,6 +140,12 @@ export default {
     };
 
     // Start transaction: insert order, items, and outbox
+    // Delivery confirmation code (docs/15-delivery-confirmation.md): generated
+    // now, shown to the retailer exactly once in this response, and required
+    // to complete the order later. Stored encrypted, never in plaintext.
+    const deliveryCode = generateCode();
+    const encrypted = encryptCode(deliveryCode);
+
     const result = await db.transaction(async (tx) => {
       const createdOrder = await OrdersRepo.createOrderRow(tx, orderRow);
 
@@ -108,11 +163,15 @@ export default {
 
       const insertedItems = await OrdersRepo.insertOrderItems(tx, itemsToInsert);
 
+      await DeliveryCodeRepo.create(tx, createdOrder.id, encrypted);
+
       // write outbox entry for guaranteed publish
       await OrdersRepo.insertOutbox(tx, "orders.created", {
         order: createdOrder,
         items: insertedItems
       });
+
+      await notifyOrderCreated(tx, createdOrder);
 
       return { order: createdOrder, items: insertedItems };
     });
@@ -120,7 +179,7 @@ export default {
     // try immediate publish (best-effort)
     publishOrderCreated({ order: result.order, items: result.items }).catch((e) => console.warn("publishOrderCreated failed", e.message));
 
-    return { ...result.order, items: result.items };
+    return { ...result.order, items: result.items, deliveryCode };
   },
 
   async getRetailerOrders(user) {
@@ -143,7 +202,19 @@ export default {
     const order = await OrdersRepo.findOrderWithItems(orderId);
     if (!order) throw new Error("Order not found");
     if (order.retailerId !== retailer.id) throw new Error("Not owner of order");
-    return order;
+
+    // The delivery code is only ever surfaced to the retailer who owns the
+    // order, and only while it has not been consumed - never to a
+    // distributor, never in a notification or log line.
+    let deliveryCode = null;
+    if (order.status !== "completed") {
+      const codeRow = await DeliveryCodeRepo.get(orderId);
+      if (codeRow && !codeRow.consumedAt) {
+        deliveryCode = decryptCode(codeRow);
+      }
+    }
+
+    return { ...order, deliveryCode };
   },
 
   async modifyOrder(user, orderId, payload) {
@@ -158,8 +229,7 @@ export default {
 
     // compute new items & totals (similar to create)
     const variantIds = (payload.items || []).map(i => i.variantId);
-    const variants = await db.select().from(productVariants).where(productVariants.id.in(variantIds));
-    const variantMap = Object.fromEntries(variants.map(v=>[v.id, v]));
+    const variantMap = await resolveVariantsForDistributor(variantIds, order.distributorId);
 
     const enriched = payload.items.map(it => {
       const v = variantMap[it.variantId];
@@ -171,7 +241,7 @@ export default {
         variantName: v.name,
         quantity: Number(it.quantity || 0),
         unit: it.unit || v.unit,
-        sellingPrice: Number(it.sellingPrice ?? v.sellingPrice),
+        sellingPrice: priceFor(it, v),
       };
     });
 
@@ -225,26 +295,95 @@ export default {
     return result;
   },
 
-  async completeOrder(user, orderId, code) {
-    // Retailer confirms delivery via code (simple check placeholder)
-    if (user.role !== "retailer") throw new Error("Only retailers allowed");
-    const retailer = await OrdersRepo.findRetailerByUserId(user.id);
+  /**
+   * Delivery -> stock -> product bill -> ledger, as ONE transaction.
+   *
+   * This replaces the NATS consumer chain (orders.completed ->
+   * inventory.consumer -> productBill.consumer -> ledger.consumer), which
+   * was broken at every hop and depended on infrastructure this single
+   * process doesn't need (docs/14-simplification.md). Delivery is now the
+   * single trigger for every downstream effect, applied atomically.
+   */
+  async applyDeliveryEffects(tx, order, items) {
+    for (const item of items) {
+      const unitCost = Number(item.variantSellingPrice || 0);
+      const qty = Number(item.quantity || 0);
+
+      // Release the reservation taken at accept, and take the stock off the
+      // distributor's hands for real.
+      await DistributorInventoryRepo.releaseReservation(tx, order.distributorId, item.variantId, qty);
+      await DistributorInventoryRepo.decrementStock(tx, order.distributorId, item.variantId, qty);
+      await RetailerInventoryRepo.addToShelf(tx, order.retailerId, item.variantId, qty);
+
+      let bill = await ProductBillsRepo.findBillByVariant(order.retailerId, order.distributorId, item.variantId);
+      if (!bill) {
+        bill = await ProductBillsRepo.createBill({
+          retailerId: order.retailerId,
+          distributorId: order.distributorId,
+          variantId: item.variantId,
+        });
+      }
+
+      // Consignment, not debt: the goods are on the retailer's shelf but they
+      // do not owe for them until they sell them. No ledger debit here - the
+      // debit is written when a sale accrues (sales.service.js).
+      await ProductBillsRepo.recordReceipt(tx, {
+        productBillId: bill.id,
+        orderId: order.id,
+        variantId: item.variantId,
+        qty,
+        unitCost,
+      });
+    }
+  },
+
+  /**
+   * Distributor marks the goods as having left the warehouse. Creates the
+   * delivery record an agent can then be assigned to.
+   */
+  async dispatchOrder(user, orderId) {
+    if (user.role !== "distributor") throw new Error("Only distributors allowed");
+    const distributor = await OrdersRepo.findDistributorByUserId(user.id);
+    if (!distributor) throw new Error("Distributor profile not found");
+
     const order = await OrdersRepo.findOrderById(orderId);
     if (!order) throw new Error("Order not found");
-    if (order.retailerId !== retailer.id) throw new Error("Not owner");
-    if (order.status !== "processing") throw new Error("Order not in processing state");
-
-    // You should validate the 'code' matches distributor's delivery code if applicable.
-    // For now, assume code matches.
+    if (order.distributorId !== distributor.id) throw new Error("Not owner");
+    if (order.status !== "processing") {
+      throw new Error("Only an accepted order can be dispatched");
+    }
 
     const result = await db.transaction(async (tx) => {
-      const updated = await OrdersRepo.updateOrder(tx, orderId, { status: "completed" });
-      await OrdersRepo.insertOutbox(tx, "orders.completed", { order: updated });
+      const updated = await OrdersRepo.updateOrder(tx, orderId, {
+        status: "dispatched",
+        dispatchedAt: new Date(),
+      });
+      await DeliveriesRepo.createForOrder(tx, orderId);
+      await OrdersRepo.insertOutbox(tx, "orders.dispatched", { order: updated });
+      await notifyOrderDispatched(tx, order);
       return updated;
     });
 
-    publishOrderCompleted({ order: result }).catch(e => console.warn("publishOrderCompleted failed", e.message));
+    publishEvent("orders.dispatched", { order: result }).catch(() => {});
     return result;
+  },
+
+  /**
+   * REMOVED - the retailer no longer completes their own order.
+   *
+   * Delivery is confirmed by the delivery agent, who must present the code the
+   * retailer received at order creation (deliveries.service.js:confirmDelivery).
+   * Neither party can complete a delivery alone, which is what makes the code a
+   * real two-party attestation rather than a formality
+   * (docs/15-delivery-confirmation.md).
+   */
+  async completeOrder() {
+    // 410 Gone: the endpoint existed and was deliberately retired, which is
+    // more useful to an old client than a 404 or a generic failure.
+    throw new AppError(
+      "Retailers no longer confirm their own deliveries. Give your delivery code to the delivery agent, who confirms it on arrival.",
+      410
+    );
   },
 
   async approveModifiedOrder(user, orderId, approved) {
@@ -301,8 +440,21 @@ export default {
     if (payload.action === "accept") {
       // set status to processing
       const result = await db.transaction(async (tx) => {
-        const updated = await OrdersRepo.updateOrder(tx, orderId, { status: "processing" });
+        const updated = await OrdersRepo.updateOrder(tx, orderId, {
+          status: "processing",
+          acceptedAt: new Date(),
+        });
+
+        // Commit the stock: it stays on the distributor's books but is no
+        // longer available to sell to anyone else. Released at delivery.
+        for (const item of order.items) {
+          await DistributorInventoryRepo.reserveForDelivery(
+            tx, order.distributorId, item.variantId, Number(item.quantity || 0)
+          );
+        }
+
         await OrdersRepo.insertOutbox(tx, "orders.accepted", { order: updated });
+        await notifyOrderAccepted(tx, order);
         return updated;
       });
       publishOrderAccepted({ order: result }).catch(e => console.warn("publishOrderAccepted failed", e.message));
@@ -313,6 +465,7 @@ export default {
       const result = await db.transaction(async (tx) => {
         const updated = await OrdersRepo.updateOrder(tx, orderId, { status: "cancelled", notes: payload.rejectionReason || null });
         await OrdersRepo.insertOutbox(tx, "orders.rejected", { order: updated });
+        await notifyOrderRejected(tx, order, payload.rejectionReason);
         return updated;
       });
       publishOrderCancelled({ order: result }).catch(e => console.warn("publishOrderCancelled failed", e.message));
@@ -326,8 +479,7 @@ export default {
       if (!variants.length) throw new Error("No modifications provided");
 
       const variantIds = variants.map(i => i.variantId);
-      const dbVariants = await db.select().from(productVariants).where(productVariants.id.in(variantIds));
-      const map = Object.fromEntries(dbVariants.map(v => [v.id, v]));
+      const map = await resolveVariantsForDistributor(variantIds, order.distributorId);
 
       const enriched = variants.map(it => {
         const v = map[it.variantId];
@@ -338,7 +490,7 @@ export default {
           variantName: v.name,
           quantity: Number(it.newQuantity || it.quantity || 0),
           unit: it.unit || v.unit,
-          sellingPrice: Number(it.sellingPrice ?? v.sellingPrice)
+          sellingPrice: priceFor(it, v)
         };
       });
 

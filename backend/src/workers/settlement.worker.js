@@ -27,12 +27,12 @@ import {
   invoices,
   invoiceItems,
   outbox,
-  variants,
+  productVariants,
   retailers,
   distributors
 } from "../db/schema.js";
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import parseArgs from "minimist";
 
 const args = parseArgs(process.argv.slice(2));
@@ -79,10 +79,8 @@ async function runSettlement(period) {
     .from(productBillTransactions)
     .where(and(
       eq(productBillTransactions.type, "delivery"),
-      and(
-        productBillTransactions.date.gte(start),
-        productBillTransactions.date.lte(end)
-      )
+      gte(productBillTransactions.date, start),
+      lte(productBillTransactions.date, end)
     ));
 
   // Map deliveries by productBillId
@@ -159,7 +157,7 @@ async function runSettlement(period) {
       const itemsWithTax = [];
       for (const it of items) {
         // Fetch variant for GST rate and HSN code
-        const variant = await tx.select().from(variants).where(eq(variants.id, it.variantId)).then(rows => rows[0]);
+        const variant = await tx.select().from(productVariants).where(eq(productVariants.id, it.variantId)).then(rows => rows[0]);
         if (!variant) {
           console.warn(`Variant ${it.variantId} not found. Skipping item.`);
           continue;
@@ -244,7 +242,7 @@ async function runSettlement(period) {
       // write outbox record for reliable publish
       await tx.insert(outbox).values({
         eventType: "invoices.created",
-        payload: JSON.stringify({ 
+        payload: ({ 
           invoiceId: inv.id, 
           retailerId, 
           distributorId, 

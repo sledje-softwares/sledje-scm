@@ -37,7 +37,7 @@ export async function clearCart(req, res, next) {
 
 export async function checkoutCart(req, res, next) {
   try {
-    const order = await CartService.checkoutCart(req.user.id, req.body.notes);
+    const order = await CartService.checkoutCart(req.user, req.body.notes);
     res.json({ success: true, order });
   } catch (e) { next(e); }
 }

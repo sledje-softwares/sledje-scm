@@ -11,10 +11,6 @@ import {
 
 const router = express.Router();
 
-// Retailer
-router.post("/retailers/register", registerRetailer);
-router.post("/retailers/login", loginRetailer);
-
 // Distributor
 router.post("/distributors/register", registerDistributor);
 router.post("/distributors/login", loginDistributor);

@@ -1,211 +1,139 @@
+// src/modules/products/products.service.js
 import ProductsRepo from "./products.repository.js";
-import { publishEvent } from "../../events/jetstream.js";
-import crypto from "crypto";
-
-
-import { db } from "../../config/postgres.js";
-import { eq } from "drizzle-orm";
+import DistributorInventoryRepo from "../inventory/distributor-inventory.repository.js";
+import { publishEvent } from "../../config/nats-streams.js";
 
 export default {
-  async getProducts({ distributorId, search, page, limit }) {
-    // when distributorId is provided, fetch its products
-    return ProductsRepo.findProductsByDistributor(distributorId, { search, page, limit });
+  // list catalog for UI carousel
+  async getCatalog({ distributorshipId, search, page, limit }) {
+    return ProductsRepo.findProducts({ distributorshipId, search, page, limit });
   },
 
-  async getProductsFromConnectedDistributors(userId) {
-    // find connected distributors for this retailer
-    const distributorIds = await ProductsRepo.getConnectedDistributorIdsForRetailer(userId);
-    if (!distributorIds || distributorIds.length === 0) return [];
-    return ProductsRepo.findProductsByDistributorIds(distributorIds);
+  /**
+   * Catalogue a retailer can actually buy from: only distributors they are
+   * connected to, and only variants those distributors stock.
+   */
+  async getProductsFromConnectedDistributors(retailerUserId) {
+    const retailer = await ProductsRepo.findRetailerByUserId(retailerUserId);
+    if (!retailer) throw new Error("Retailer profile not found");
+
+    const distributorIds =
+      await ProductsRepo.getConnectedDistributorIdsForRetailer(retailer.id);
+    if (!distributorIds.length) return [];
+
+    return ProductsRepo.findSellableItemsForDistributors(distributorIds);
   },
 
   async getProductById(productId) {
     return ProductsRepo.findProductById(productId);
   },
 
-  async createProduct(distributorUserId, payload) {
-    // ensure distributorUserId maps to distributor record
-    const distributor = await ProductsRepo.findDistributorByUserId(distributorUserId);
-    if (!distributor) throw new Error("Distributor profile not found");
+  // allow distributor to create catalog entries if you want
+  async createCatalogProduct(user, payload) {
+    if (!user || user.role !== "distributor") throw new Error("Forbidden");
 
-    const result = await ProductsRepo.createProduct(distributor.id, payload);
+    if (!payload.distributorshipId) {
+      throw new Error("distributorshipId is required");
+    }
 
-    // publish event for other services if needed
-    publishEvent("products.created", {
-      productId: result.id,
-      distributorId: distributor.id,
-      name: result.name,
-      variants: result.variants
-    }).catch((e) => console.warn("publish products.created failed:", e.message));
+    const product = await ProductsRepo.createProductInCatalog({
+      distributorshipId: payload.distributorshipId,
+      name: payload.name,
+      imageUrl: payload.imageUrl,
+      category: payload.category,
+      subcategory: payload.subcategory,
+      variants: payload.variants,
+    });
 
-    return result;
+    publishEvent("products.created", { product }).catch(() => {});
+    return product;
   },
 
-  async updateProduct(distributorUserId, productId, payload) {
-    const distributor = await ProductsRepo.findDistributorByUserId(distributorUserId);
-    if (!distributor) throw new Error("Distributor profile not found");
+  async updateCatalogProduct(user, productId, payload) {
+    if (!user || user.role !== "distributor") throw new Error("Forbidden");
 
-    // ownership check: ensure product belongs to distributor
-    const product = await ProductsRepo.findProductById(productId);
-    if (!product) throw new Error("Product not found");
-    if (product.distributorId !== distributor.id) throw new Error("Not allowed to modify this product");
+    const updated = await ProductsRepo.updateProductInCatalog(productId, payload);
+    if (!updated) throw new Error("Product not found");
 
-    const updated = await ProductsRepo.updateProduct(distributor.id, productId, payload);
-
-    publishEvent("products.updated", {
-      productId,
-      distributorId: distributor.id,
-      updated
-    }).catch((e) => console.warn("publish products.updated failed:", e.message));
-
+    publishEvent("products.updated", { productId, updated }).catch(() => {});
     return updated;
   },
 
-  async deleteProduct(distributorUserId, productId) {
-    const distributor = await ProductsRepo.findDistributorByUserId(distributorUserId);
-    if (!distributor) throw new Error("Distributor profile not found");
+  async deleteCatalogProduct(user, productId) {
+    if (!user || user.role !== "distributor") throw new Error("Forbidden");
 
-    const product = await ProductsRepo.findProductById(productId);
-    if (!product) throw new Error("Product not found");
-    if (product.distributorId !== distributor.id) throw new Error("Not allowed to delete this product");
-
-    await ProductsRepo.deleteProduct(productId);
-
-    publishEvent("products.deleted", { productId, distributorId: distributor.id }).catch((e) =>
-      console.warn("publish products.deleted failed:", e.message)
-    );
+    await ProductsRepo.deleteProductFromCatalog(productId);
+    publishEvent("products.deleted", { productId }).catch(() => {});
   },
 
-   // Bulk import: rows is array of objects from CSV/Excel
-  async bulkInsert(rows, distributorUserId) {
-    // 1) Resolve distributor from user
+  // ------------- BULK IMPORT -------------
+  /**
+   * CSV structure (example):
+   * distributorshipName,productName,variantName,sku,mrp,unit,hsnCode,gstRate,stock,costPrice,sellingPrice,expiry
+   */
+  async bulkImportForDistributor(distributorUserId, rows) {
     const distributor = await ProductsRepo.findDistributorByUserId(distributorUserId);
     if (!distributor) throw new Error("Distributor profile not found");
 
-    const distributorId = distributor.id;
+    for (const r of rows) {
+      const distributorshipName = r.distributorshipName?.trim();
+      if (!distributorshipName) continue;
 
-    // 2) For each row, create/update product + variant
-    for (const row of rows) {
-      // Basic required fields
-      const name = row.name?.trim();
-      const variantName = row.variantName?.trim();
-      const sku = row.sku?.trim();
-
-      if (!name || !variantName || !sku) {
-        // Skip bad rows, or you can collect errors
-        continue;
+      // 1) find or create distributorship
+      let ds = await ProductsRepo.findDistributorshipByName(distributorshipName);
+      if (!ds) {
+        ds = await ProductsRepo.createDistributorship(distributorshipName);
       }
 
-      const category = row.category || null;
-      const subcategory = row.subcategory || null;
+      // 2) find or create product in that distributorship
+      const productName = r.productName?.trim();
+      if (!productName) continue;
 
-      // Numeric conversions
-      const stock = Number(row.stock || 0);
-      const costPrice = Number(row.costPrice || 0);
-      const sellingPrice = Number(row.sellingPrice || 0);
-      const gstRate = row.gstRate != null ? Number(row.gstRate) : 0;
+      let product = await ProductsRepo.findProductByNameInDistributorship(
+        productName,
+        ds.id,
+      );
 
-      // GST + HSN
-      const hsnCode = row.hsnCode || null;
-      const isTaxInclusive =
-        row.isTaxInclusive != null
-          ? row.isTaxInclusive === true ||
-            row.isTaxInclusive === "true" ||
-            row.isTaxInclusive === "1"
-          : false;
+      if (!product) {
+        product = (
+          await ProductsRepo.createProductInCatalog({
+            distributorshipId: ds.id,
+            name: productName,
+            imageUrl: r.imageUrl || null,
+            category: r.category || null,
+            subcategory: r.subcategory || null,
+            variants: [],
+          })
+        );
+      }
 
-      // optional fields
-      const unit = row.unit || null;
-      const expiry = row.expiry ? new Date(row.expiry) : null;
+      // 3) find or create variant
+      const sku = r.sku?.trim();
+      const variantName = r.variantName?.trim() || "Default";
+      let variant = sku
+        ? await ProductsRepo.findVariantBySkuInProduct(sku, product.id)
+        : null;
 
-      // 2a) Ensure product exists
-      const productId = await this.findOrCreateProduct({
-        name,
-        category,
-        subcategory,
-        distributorId,
+      if (!variant) {
+        variant = await ProductsRepo.createVariant({
+          productId: product.id,
+          name: variantName,
+          sku: sku || `${product.id}-${Date.now()}`,
+          mrp: r.mrp ?? "0",
+          unit: r.unit || null,
+          hsnCode: r.hsnCode || null,
+          gstRate: r.gstRate ?? "0",
+          isTaxInclusive: r.isTaxInclusive ?? false,
+        });
+      }
+
+      // 4) add/update distributor inventory for this variant
+      await DistributorInventoryRepo.upsertInventory(distributor.id, variant.id, {
+        stock: Number(r.stock ?? 0),
+        costPrice: r.costPrice ?? "0",
+        sellingPrice: r.sellingPrice ?? r.mrp ?? "0",
+        expiry: r.expiry ? new Date(r.expiry) : null,
       });
-
-      // 2b) Ensure variant exists / updated
-      await this.insertVariant(productId, {
-        variantName,
-        sku,
-        stock,
-        costPrice,
-        sellingPrice,
-        expiry,
-        hsnCode,
-        gstRate,
-        unit,
-        isTaxInclusive,
-      });
     }
   },
-
-  async findOrCreateProduct({ name, category, subcategory = null, distributorId }) {
-    // 1. Try to find existing product with same distributor + name
-    let product = await ProductsRepo.findProductByName(name, distributorId);
-
-    if (product) return product.id; // Found → Use existing
-
-    // 2. Create new product using repo's shape
-    const productPayload = {
-      name,
-      icon: "📦",
-      category,
-      subcategory,
-      variants: [], // we'll insert variants separately
-    };
-
-    const created = await ProductsRepo.createProduct(distributorId, productPayload);
-    return created.id;
-  },
-
-  // Insert or update a variant for the product
-  async insertVariant(
-    productId,
-    {
-      variantName,
-      sku,
-      stock,
-      costPrice,
-      sellingPrice,
-      expiry,
-      hsnCode,
-      gstRate,
-      unit,
-      isTaxInclusive,
-    }
-  ) {
-    // 1. Check if variant already exists under this product
-    const existing = await ProductsRepo.findVariantBySku(sku, productId);
-    const data = {
-      productId,
-      name: variantName,
-      sku,
-      stock,
-      costPrice,
-      sellingPrice,
-      expiry,
-      hsnCode,
-      gstRate: String(gstRate),
-      unit,
-      isTaxInclusive,
-    };
-
-    if (existing) {
-      // update
-      await ProductsRepo.updateVariant(existing.id, data);
-      return existing.id;
-    }
-
-    // 2. Insert new variant
-    const created = await ProductsRepo.createVariant({
-      id: crypto.randomUUID(),
-      ...data,
-    });
-
-    return created.id;
-  },
-
 };

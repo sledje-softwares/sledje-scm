@@ -3,9 +3,9 @@ import {
   users,
   retailers,
   distributors,
-  // otp table name in your schema: we expect otp_codes table (if not present, create it)
+  otpCodes,
 } from "../../db/schema.js";
-import { sql,eq } from "drizzle-orm";
+import { sql, eq, and, gt } from "drizzle-orm";
 
 
 export default {
@@ -26,7 +26,7 @@ export default {
   },
 
   async findUserById(id) {
-    const [row] = await db.select().from(users).where(users.id.eq(id));
+    const [row] = await db.select().from(users).where(eq(users.id, id));
     return row || null;
   },
 
@@ -47,7 +47,7 @@ export default {
   },
 
   async findRetailerByUserId(userId) {
-    const [row] = await db.select().from(retailers).where(retailers.userId.eq(userId));
+    const [row] = await db.select().from(retailers).where(eq(retailers.userId, userId));
     return row || null;
   },
 
@@ -67,19 +67,30 @@ export default {
   },
 
   async findDistributorByUserId(userId) {
-    const [row] = await db.select().from(distributors).where(distributors.userId.eq(userId));
+    const [row] = await db.select().from(distributors).where(eq(distributors.userId, userId));
     return row || null;
   },
 
   // OTP: raw SQL - expects otp_codes table present
   async saveOtp({ email, otp, expiresAt }) {
-    return db.execute(sql`INSERT INTO otp_codes (email, otp, expires_at) VALUES (${email}, ${otp}, ${expiresAt})`);
+    const [row] = await db
+      .insert(otpCodes)
+      .values({ email, otp, expiresAt: new Date(expiresAt) })
+      .returning();
+    return row;
   },
 
   async getValidOtp(email, otp) {
-    const now = new Date().toISOString();
-    const [row] = await db.select().from(sql`otp_codes`).where(sql`email = ${email} AND otp = ${otp} AND expires_at > ${now}`);
-    // NOTE: drizzle doesn't have dynamic table ref via variable; using raw SQL above for otp_codes.
+    const [row] = await db
+      .select()
+      .from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.email, email),
+          eq(otpCodes.otp, otp),
+          gt(otpCodes.expiresAt, new Date())
+        )
+      );
     return row || null;
   },
 
@@ -89,7 +100,7 @@ export default {
 
   // update password
   async updatePassword(userId, newHashed) {
-    const [row] = await db.update(users).set({ password: newHashed }).where(users.id.eq(userId)).returning();
+    const [row] = await db.update(users).set({ password: newHashed }).where(eq(users.id, userId)).returning();
     return row;
   }
 };

@@ -1,5 +1,5 @@
 import RetailersRepo from "./retailers.repository.js";
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 
 export default {
   async getProfile(userId) {

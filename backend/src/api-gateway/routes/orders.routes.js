@@ -11,6 +11,7 @@ import {
   getDistributorOrders,
   getDistributorOrder,
   processDistributorOrder,
+  dispatchOrder,
   updateOrderStatus
 } from "../controllers/orders.controller.js";
 
@@ -31,6 +32,7 @@ router.put("/retailer/orders/:orderId/approve", requireAuth, approveModifiedOrde
 router.get("/distributor/orders", requireAuth, getDistributorOrders);
 router.get("/distributor/orders/:orderId", requireAuth, getDistributorOrder);
 router.put("/distributor/orders/:orderId/process", requireAuth, processDistributorOrder);
+router.put("/distributor/orders/:orderId/dispatch", requireAuth, dispatchOrder);
 router.put("/distributor/orders/:orderId/status", requireAuth, updateOrderStatus);
 
 export default router;

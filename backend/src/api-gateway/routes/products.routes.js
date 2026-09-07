@@ -5,10 +5,10 @@ import {
   getSingleProduct,
   addProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,bulkImportProducts
 } from "../controllers/products.controller.js";
 import multer from "multer";
-import { bulkImportProducts } from "../controllers/products.controller.js";
+
 
 const upload = multer(); // memory storage is fine for CSV/Excel
 

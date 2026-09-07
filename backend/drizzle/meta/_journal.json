@@ -8,6 +8,55 @@
       "when": 1763632956699,
       "tag": "0000_spotty_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1764171923567,
+      "tag": "0001_cool_lord_tyger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764241742468,
+      "tag": "0002_oval_doctor_octopus",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788776509487,
+      "tag": "0003_add_order_delivery_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788777611520,
+      "tag": "0004_add_outbox_error_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788784408488,
+      "tag": "0005_product_bills_fk_and_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788792981021,
+      "tag": "0006_pos_delivery_agents_two_stage",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788792995183,
+      "tag": "0007_drop_current_unit_cost",
+      "breakpoints": true
     }
   ]
 }

@@ -7,4 +7,3 @@ async function test() {
 }
 
 test();
-console.log("DATABASE_URL:", process.env.POSTGRES_URL);

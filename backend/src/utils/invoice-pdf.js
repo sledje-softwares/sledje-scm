@@ -5,7 +5,11 @@ import path from "path";
 export async function generateInvoicePDF(invoice, items) {
   return new Promise((resolve, reject) => {
     try {
-      const filePath = path.resolve(`./invoices/invoice-${invoice.id}.pdf`);
+      const invoicesDir = path.resolve("./invoices");
+      // The directory is not part of the repo and nothing else creates it -
+      // without this, the write stream below fails on a fresh checkout.
+      fs.mkdirSync(invoicesDir, { recursive: true });
+      const filePath = path.join(invoicesDir, `invoice-${invoice.id}.pdf`);
       const doc = new PDFDocument({ margin: 50 });
       const stream = fs.createWriteStream(filePath);
 

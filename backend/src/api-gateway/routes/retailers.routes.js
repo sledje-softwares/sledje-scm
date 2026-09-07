@@ -3,6 +3,7 @@ import {
   getRetailerProfile,
   updateRetailerProfile
 } from "../controllers/retailers.controller.js";
+
 import {
   registerRetailer,
   loginRetailer

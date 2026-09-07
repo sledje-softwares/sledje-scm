@@ -1,4 +1,4 @@
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 
 /* Small helpers for event publishing */
 export const publishOrderCreated = async (payload) => publishEvent("orders.created", payload);

@@ -30,8 +30,8 @@ export default {
   },
 
   // --- Checkout: convert cart -> multiple grouped orders ---
-  async checkoutCart(userId, notes = "") {
-    const retailer = await OrdersRepo.findRetailerByUserId(userId);
+  async checkoutCart(user, notes = "") {
+    const retailer = await OrdersRepo.findRetailerByUserId(user.id);
     const cart = await CartRepo.getCart(retailer.id);
 
     if (cart.length === 0) throw new Error("Cart is empty");
@@ -59,7 +59,9 @@ export default {
         notes,
       };
 
-      const order = await OrdersService.createOrder(orderPayload, userId);
+      // NOTE: createOrder's signature is (user, payload) - it needs the role to
+      // authorise, not just the id.
+      const order = await OrdersService.createOrder(user, orderPayload);
       createdOrders.push(order);
     }
 

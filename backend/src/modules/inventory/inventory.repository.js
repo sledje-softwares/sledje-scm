@@ -1,6 +1,6 @@
 import { db } from "../../config/postgres.js";
 import { inventory, productVariants, products, retailers, orders, orderItems } from "../../db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export default {
   async findRetailerIdByUserId(userId) {
@@ -35,26 +35,52 @@ export default {
     return rows[0] || null;
   },
 
-  async createInventoryItem(retailerId, variant, product) {
+  /**
+   * Add qty to a retailer's shelf position for one variant, inside a
+   * transaction, creating the row on first delivery. Used at delivery
+   * confirmation - see orders.service.js applyDeliveryEffects().
+   */
+  async addToShelf(tx, retailerId, variantId, qty) {
+    const [existing] = await tx
+      .select()
+      .from(inventory)
+      .where(and(eq(inventory.retailerId, retailerId), eq(inventory.variantId, variantId)));
+
+    if (existing) {
+      const [row] = await tx
+        .update(inventory)
+        .set({ qty: sql`${inventory.qty} + ${qty}`, lastUpdated: new Date() })
+        .where(eq(inventory.id, existing.id))
+        .returning();
+      return row;
+    }
+
+    const [row] = await tx
+      .insert(inventory)
+      .values({ retailerId, variantId, qty })
+      .returning();
+    return row;
+  },
+
+  /**
+   * The `inventory` table holds only the retailer's shelf position:
+   * retailerId, variantId, qty, reorderLevel, expiry, dailyAvgSales, lastUpdated.
+   * Product/variant descriptors are joined from the catalogue, and price/stock
+   * belong to distributor_inventory - migration 0001 removed them from
+   * product_variants, so nothing else may be written here.
+   */
+  async createInventoryItem(retailerId, variant, _product) {
     const [row] = await db.insert(inventory).values({
       retailerId,
-      productId: variant.productId,
       variantId: variant.id,
-      productName: product.name,
-      variantName: variant.name,
-      sku: variant.sku,
-      stock: variant.stock ?? 0,
-      sellingPrice: variant.sellingPrice,
-      costPrice: variant.costPrice,
-      distributorId: product.distributorId,
-      dailyAvgSales: 0,
+      qty: 0,
     }).returning();
     return row;
   },
 
-  async updateStock(retailerId, variantId, newStock) {
+  async updateStock(retailerId, variantId, newQty) {
     const [row] = await db.update(inventory)
-      .set({ stock: newStock })
+      .set({ qty: newQty, lastUpdated: new Date() })
       .where(and(eq(inventory.retailerId, retailerId), eq(inventory.variantId, variantId)))
       .returning();
     return row;

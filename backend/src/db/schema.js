@@ -9,11 +9,13 @@ import {
   jsonb,
   index,
   unique,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /* ===============================
-   1. USERS (for login/auth)
-   =============================== */
+  1. USERS (for login/auth)
+  =============================== */
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -28,8 +30,8 @@ export const users = pgTable("users", {
 });
 
 /* ===============================
-   2. RETAILERS
-   =============================== */
+  2. RETAILERS
+  =============================== */
 
 export const retailers = pgTable("retailers", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -48,13 +50,14 @@ export const retailers = pgTable("retailers", {
   state: text("state"), // for GST intra/inter state logic
   location: text("location"),
   address: text("address"),
+  profilePictureUrl: text("profile_picture_url"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 /* ===============================
-   3. DISTRIBUTORS
-   =============================== */
+  3. DISTRIBUTORS
+  =============================== */
 
 export const distributors = pgTable("distributors", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -73,13 +76,14 @@ export const distributors = pgTable("distributors", {
   state: text("state"), // for GST intra/inter state logic
   location: text("location"),
   address: text("address"),
+  profilePictureUrl: text("profile_picture_url"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 /* ===============================
-   4. CONNECTION REQUESTS
-   =============================== */
+  4. CONNECTION REQUESTS
+  =============================== */
 
 export const connectionRequests = pgTable("connection_requests", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -100,8 +104,8 @@ export const connectionRequests = pgTable("connection_requests", {
 });
 
 /* ===============================
-   5. CONNECTIONS (approved)
-   =============================== */
+  5. CONNECTIONS (approved)
+  =============================== */
 
 export const connections = pgTable(
   "connections",
@@ -124,30 +128,41 @@ export const connections = pgTable(
 );
 
 /* ===============================
-   6. PRODUCTS
-   =============================== */
+  6. DISTRIBUTORSHIPS (NEW)
+  =============================== */
+
+export const distributorships = pgTable("distributorships", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  name: text("name").notNull().unique(),
+  description: text("description"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+/* ===============================
+  7. PRODUCTS (GLOBAL CATALOG)
+  =============================== */
 
 export const products = pgTable("products", {
   id: uuid("id").defaultRandom().primaryKey(),
 
-  distributorId: uuid("distributor_id").references(() => distributors.id, {
-    onDelete: "cascade",
-  }),
+  // NEW: Every product belongs to a distributorship
+  distributorshipId: uuid("distributorship_id")
+    .references(() => distributorships.id, { onDelete: "cascade" })
+    .notNull(),
 
   name: text("name").notNull(),
-  icon: text("icon"),
+  imageUrl: text("image_url"), // NEW
+
   category: text("category"),
   subcategory: text("subcategory"),
-
-  // optional: base reorder level (retailer-specific kept on inventory)
-  reorderLevel: integer("reorder_level").default(5),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 /* ===============================
-   7. PRODUCT VARIANTS
-   =============================== */
+  8. PRODUCT VARIANTS (NO STOCK)
+  =============================== */
 
 export const productVariants = pgTable("product_variants", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -158,24 +173,60 @@ export const productVariants = pgTable("product_variants", {
 
   name: text("name").notNull(),
   sku: text("sku").notNull().unique(),
+  mrp: numeric("mrp", { precision: 10, scale: 2 }).default("0"),
 
   unit: text("unit"),
   hsnCode: text("hsn_code"),
+
   gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).default("0"),
   isTaxInclusive: boolean("is_tax_inclusive").default(false),
-
-  stock: integer("stock").notNull().default(0),
-  sellingPrice: numeric("selling_price", { precision: 10, scale: 2 }).notNull(),
-  costPrice: numeric("cost_price", { precision: 10, scale: 2 }).notNull(),
-
-  expiry: timestamp("expiry"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 /* ===============================
-   8. RETAILER INVENTORY
-   =============================== */
+  9. DISTRIBUTOR INVENTORY (NEW)
+  =============================== */
+
+export const distributorInventory = pgTable("distributor_inventory", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  distributorId: uuid("distributor_id")
+    .references(() => distributors.id, { onDelete: "cascade" })
+    .notNull(),
+
+  variantId: uuid("variant_id")
+    .references(() => productVariants.id, { onDelete: "cascade" })
+    .notNull(),
+
+  stock: integer("stock").default(0),
+
+  sellingPrice: numeric("selling_price", {
+    precision: 10,
+    scale: 2,
+  }).default("0"),
+
+  costPrice: numeric("cost_price", {
+    precision: 10,
+    scale: 2,
+  }).default("0"),
+
+  expiry: timestamp("expiry"),
+
+  lowStockThreshold: integer("low_stock_threshold").default(5),
+
+  // Stock committed to an accepted order or already in transit. Reserved when
+  // the distributor accepts, released when the delivery is confirmed. On-hand
+  // available to sell is (stock - out_for_delivery).
+  outForDelivery: integer("out_for_delivery").notNull().default(0),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
+/* ===============================
+  10. RETAILER INVENTORY
+  =============================== */
 
 export const inventory = pgTable("inventory", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -205,8 +256,8 @@ export const inventory = pgTable("inventory", {
 });
 
 /* ===============================
-   9. CART
-   =============================== */
+  9. CART
+  =============================== */
 
 export const carts = pgTable("carts", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -226,8 +277,8 @@ export const carts = pgTable("carts", {
 });
 
 /* ===============================
-   10. ORDERS
-   =============================== */
+  10. ORDERS
+  =============================== */
 
 export const orders = pgTable("orders", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -237,9 +288,11 @@ export const orders = pgTable("orders", {
   retailerId: uuid("retailer_id").references(() => retailers.id),
   distributorId: uuid("distributor_id").references(() => distributors.id),
 
+  // pending | modified | processing | dispatched | out_for_delivery
+  // | delivered | cancelled
   status: text("status")
     .notNull()
-    .default("pending"), // pending | modified | processing | cancelled | completed
+    .default("pending"),
 
   totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
   notes: text("notes"),
@@ -250,13 +303,14 @@ export const orders = pgTable("orders", {
 
   // optional timestamps for analytics / audit
   acceptedAt: timestamp("accepted_at"),
+  dispatchedAt: timestamp("dispatched_at"), // left the distributor's warehouse
   deliveredAt: timestamp("delivered_at"),
   completedAt: timestamp("completed_at"),
 });
 
 /* ===============================
-   11. ORDER ITEMS
-   =============================== */
+  11. ORDER ITEMS
+  =============================== */
 
 export const orderItems = pgTable("order_items", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -283,8 +337,8 @@ export const orderItems = pgTable("order_items", {
 });
 
 /* ===============================
-   12. NOTIFICATIONS
-   =============================== */
+  12. NOTIFICATIONS
+  =============================== */
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -305,8 +359,8 @@ export const notifications = pgTable("notifications", {
 });
 
 /* ===============================
-   15. LEDGER
-   =============================== */
+  15. LEDGER
+  =============================== */
 
 export const ledger = pgTable("ledger", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -329,8 +383,8 @@ export const ledger = pgTable("ledger", {
 });
 
 /* ===============================
-   16. OUTBOX
-   =============================== */
+  16. OUTBOX
+  =============================== */
 
 export const outbox = pgTable(
   "outbox",
@@ -340,6 +394,7 @@ export const outbox = pgTable(
     eventType: text("event_type").notNull(),
     payload: jsonb("payload").notNull(),
     published: boolean("published").default(false),
+    error: text("error"),
 
     createdAt: timestamp("created_at").defaultNow(),
   },
@@ -347,8 +402,8 @@ export const outbox = pgTable(
 );
 
 /* ===============================
-   17. OTP CODES
-   =============================== */
+  17. OTP CODES
+  =============================== */
 
 export const otpCodes = pgTable("otp_codes", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -361,18 +416,28 @@ export const otpCodes = pgTable("otp_codes", {
 });
 
 /* ===============================
-   18. PRODUCT BILLS (per variant)
-   =============================== */
+  18. PRODUCT BILLS (per variant)
+  =============================== */
 
 export const productBills = pgTable(
   "product_bills",
   {
     id: uuid("id").defaultRandom().primaryKey(),
 
-    retailerId: uuid("retailer_id").notNull(),
-    distributorId: uuid("distributor_id").notNull(),
-    variantId: uuid("variant_id").notNull(),
+    retailerId: uuid("retailer_id")
+      .notNull()
+      .references(() => retailers.id, { onDelete: "cascade" }),
+    distributorId: uuid("distributor_id")
+      .notNull()
+      .references(() => distributors.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id, { onDelete: "cascade" }),
 
+    // --- Two-stage balance (docs/02-product-billing.md) ---
+    // Delivery records stock RECEIVED but not yet payable (consignment the
+    // distributor is financing). A sale to a customer is what converts it into
+    // money DUE. outstandingBalance = totalAmountDue - totalAmountPaid.
     outstandingBalance: numeric("outstanding_balance", {
       precision: 14,
       scale: 2,
@@ -387,10 +452,17 @@ export const productBills = pgTable(
     }).default("0"),
     totalQuantityDelivered: integer("total_quantity_delivered").default(0),
 
-    currentUnitCost: numeric("current_unit_cost", {
-      precision: 12,
+    // Received but not yet sold - the consignment position.
+    qtyReceivedUnsold: integer("qty_received_unsold").notNull().default(0),
+    amountReceivedNotDue: numeric("amount_received_not_due", {
+      precision: 14,
       scale: 2,
-    }).default("0"),
+    })
+      .notNull()
+      .default("0"),
+    // Sold through, and therefore accrued into totalAmountDue.
+    qtySold: integer("qty_sold").notNull().default(0),
+
     lastTransactionDate: timestamp("last_transaction_date"),
     meta: jsonb("meta"),
 
@@ -402,12 +474,22 @@ export const productBills = pgTable(
       table.retailerId,
       table.variantId
     ),
+    // Was missing entirely (P1-15): the find-or-create in
+    // applyDeliveryEffects/createBill can race two concurrent deliveries for
+    // the same (retailer, distributor, variant) into two bill rows that
+    // silently split one balance in two. This makes that impossible at the
+    // database level instead of relying on application-level timing.
+    unique("uq_product_bill").on(
+      table.retailerId,
+      table.distributorId,
+      table.variantId
+    ),
   ]
 );
 
 /* ===============================
-   19. PRODUCT BILL TRANSACTIONS
-   =============================== */
+  19. PRODUCT BILL TRANSACTIONS
+  =============================== */
 
 export const productBillTransactions = pgTable("product_bill_transactions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -419,13 +501,18 @@ export const productBillTransactions = pgTable("product_bill_transactions", {
   quantity: integer("quantity").default(0),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).default("0"),
   amount: numeric("amount", { precision: 14, scale: 2 }).default("0"),
-  type: text("type").notNull(), // delivery | return | payment | adjustment
+  // receipt  - goods delivered, added to consignment (not yet payable)
+  // accrual  - sold through, moved from consignment into money due
+  // payment  - retailer paid the distributor
+  // return | adjustment
+  // ("delivery" is the pre-two-stage name for receipt; kept for old rows.)
+  type: text("type").notNull(),
   metadata: jsonb("metadata"),
 });
 
 /* ===============================
-   20. PRODUCT DELIVERY LOG
-   =============================== */
+  20. PRODUCT DELIVERY LOG
+  =============================== */
 
 export const productDeliveryLog = pgTable(
   "product_delivery_log",
@@ -452,8 +539,8 @@ export const productDeliveryLog = pgTable(
 );
 
 /* ===============================
-   21. INVOICES
-   =============================== */
+  21. INVOICES
+  =============================== */
 
 export const invoices = pgTable(
   "invoices",
@@ -506,8 +593,8 @@ export const invoices = pgTable(
 );
 
 /* ===============================
-   22. INVOICE ITEMS
-   =============================== */
+  22. INVOICE ITEMS
+  =============================== */
 
 export const invoiceItems = pgTable(
   "invoice_items",
@@ -548,8 +635,8 @@ export const invoiceItems = pgTable(
 );
 
 /* ===============================
-   23. INVENTORY SNAPSHOTS (for aging/analytics)
-   =============================== */
+  23. INVENTORY SNAPSHOTS (for aging/analytics)
+  =============================== */
 
 export const inventorySnapshots = pgTable("inventory_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -597,3 +684,237 @@ export const retailerInventory = pgTable("retailer_inventory", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+
+
+// =========================================
+// ORDER DELIVERY CODES
+// (docs/15-delivery-confirmation.md)
+//
+// One code per order, generated at order creation, held by the retailer.
+// Stored encrypted (not hashed) - see src/utils/deliveryCode.js for why.
+// =========================================
+export const orderDeliveryCodes = pgTable("order_delivery_codes", {
+  orderId: uuid("order_id")
+    .primaryKey()
+    .references(() => orders.id, { onDelete: "cascade" }),
+
+  codeEnc: text("code_enc").notNull(),   // base64 ciphertext
+  codeIv: text("code_iv").notNull(),     // base64 IV
+  codeTag: text("code_tag").notNull(),   // base64 GCM auth tag
+
+  attempts: integer("attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until"),
+  consumedAt: timestamp("consumed_at"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+
+/* ===============================
+  PRODUCT BILL LAYERS (FIFO cost layers)
+  docs/02-product-billing.md, docs/12-target-model.md
+
+  One layer per delivery. Sales consume layers oldest-first, so the amount that
+  becomes due reflects what the retailer actually paid for the units they sold -
+  which a single overwritten "current unit cost" could never express.
+  =============================== */
+
+export const productBillLayers = pgTable(
+  "product_bill_layers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    productBillId: uuid("product_bill_id")
+      .notNull()
+      .references(() => productBills.id, { onDelete: "cascade" }),
+
+    orderId: uuid("order_id"),
+
+    qtyReceived: integer("qty_received").notNull(),
+    qtyConsumed: integer("qty_consumed").notNull().default(0),
+
+    unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),
+
+    receivedAt: timestamp("received_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_pbl_fifo").on(table.productBillId, table.receivedAt),
+    check("ck_layer_consumed", sql`${table.qtyConsumed} <= ${table.qtyReceived}`),
+  ]
+);
+
+/* ===============================
+  CUSTOMERS (the retailer's own customers)
+  Walk-in sales need no customer row; a name/phone can optionally be attached.
+  No credit/khata - deliberately out of scope.
+  =============================== */
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    retailerId: uuid("retailer_id")
+      .notNull()
+      .references(() => retailers.id, { onDelete: "cascade" }),
+
+    name: text("name"),
+    phone: text("phone"),
+
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [unique("uq_customer_phone").on(table.retailerId, table.phone)]
+);
+
+/* ===============================
+  RETAIL PRICES
+  What the retailer sells a variant for. Distinct from product_variants.mrp
+  (the printed price) and from distributor_inventory.selling_price (what the
+  retailer pays). Without this there is no margin.
+  =============================== */
+
+export const retailPrices = pgTable(
+  "retail_prices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    retailerId: uuid("retailer_id")
+      .notNull()
+      .references(() => retailers.id, { onDelete: "cascade" }),
+
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id, { onDelete: "cascade" }),
+
+    price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [unique("uq_retail_price").on(table.retailerId, table.variantId)]
+);
+
+/* ===============================
+  SALES (the shop's outbound bill)
+  =============================== */
+
+export const sales = pgTable(
+  "sales",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    retailerId: uuid("retailer_id")
+      .notNull()
+      .references(() => retailers.id, { onDelete: "cascade" }),
+
+    customerId: uuid("customer_id").references(() => customers.id), // null = walk-in
+
+    billNumber: text("bill_number").notNull(),
+    soldAt: timestamp("sold_at").notNull().defaultNow(),
+
+    subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
+    taxTotal: numeric("tax_total", { precision: 12, scale: 2 }).notNull().default("0"),
+    discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
+    total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+
+    status: text("status").notNull().default("completed"), // completed | voided
+
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    unique("uq_sale_bill").on(table.retailerId, table.billNumber),
+    index("idx_sales_retailer_date").on(table.retailerId, table.soldAt),
+  ]
+);
+
+export const saleItems = pgTable("sale_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  saleId: uuid("sale_id")
+    .notNull()
+    .references(() => sales.id, { onDelete: "cascade" }),
+
+  variantId: uuid("variant_id")
+    .notNull()
+    .references(() => productVariants.id),
+
+  quantity: integer("quantity").notNull(),
+
+  // what the customer paid
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull().default("0"),
+  // weighted cost of the FIFO layers this line consumed - stamped at sale time
+  unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull().default("0"),
+
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+});
+
+/* Split payment ("200 cash, 300 UPI") is the normal case at a counter,
+   not an edge case - hence a table rather than a column. */
+export const salePayments = pgTable("sale_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  saleId: uuid("sale_id")
+    .notNull()
+    .references(() => sales.id, { onDelete: "cascade" }),
+
+  method: text("method").notNull(), // cash | upi | card
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+});
+
+/* ===============================
+  DELIVERY AGENTS (third actor - platform-level pool)
+  users.role gains "delivery_agent". Any distributor may assign an available
+  agent. Vetting/ratings/disputes are deliberately out of scope.
+  =============================== */
+
+export const deliveryAgents = pgTable("delivery_agents", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  vehicleNumber: text("vehicle_number"),
+  operatingPincode: text("operating_pincode"),
+
+  isAvailable: boolean("is_available").notNull().default(true),
+  active: boolean("active").notNull().default(true),
+
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+/* ===============================
+  DELIVERIES
+  Created when the distributor dispatches. The agent confirms with the code the
+  RETAILER received at order creation - neither party can complete it alone.
+  =============================== */
+
+export const deliveries = pgTable(
+  "deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+
+    agentId: uuid("agent_id").references(() => deliveryAgents.id),
+
+    // pending_assignment | assigned | picked_up | delivered | failed
+    status: text("status").notNull().default("pending_assignment"),
+
+    assignedAt: timestamp("assigned_at"),
+    pickedUpAt: timestamp("picked_up_at"),
+    deliveredAt: timestamp("delivered_at"),
+    failureReason: text("failure_reason"),
+
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_deliveries_order").on(table.orderId),
+    index("idx_deliveries_agent").on(table.agentId, table.status),
+  ]
+);

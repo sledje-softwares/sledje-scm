@@ -1,8 +1,8 @@
 import ConnectionsRepo from "./connections.repository.js";
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 import { db } from "../../config/postgres.js";
-import { retailers, distributors, users } from "../../db/schema.js";
-import { eq } from "drizzle-orm";
+import { connectionRequests, connections, retailers, distributors, users } from "../../db/schema.js";
+import { eq, inArray } from "drizzle-orm"; // ✅ Import inArray
 
 export default {
   async sendRequest(retailerUserId, distributorId, message) {
@@ -37,7 +37,8 @@ export default {
 
     if (!distributorIds.length) return [];
 
-    return db.select().from(distributors).where(distributors.id.in(distributorIds));
+    // ✅ Use inArray instead of eq for array of IDs
+    return db.select().from(distributors).where(inArray(distributors.id, distributorIds));
   },
 
   async getDistributorRequests(distributorUserId) {
@@ -46,14 +47,53 @@ export default {
   },
 
   async getConnectedRetailers(distributorUserId) {
+    // ✅ Use eq() for single value lookup
     const [dist] = await db.select().from(distributors).where(eq(distributors.userId, distributorUserId));
+    
+    if (!dist) throw new Error("Distributor not found");
 
     const cons = await ConnectionsRepo.getDistributorConnections(dist.id);
     const retailerIds = cons.map((c) => c.retailerId);
 
     if (!retailerIds.length) return [];
 
-    return db.select().from(retailers).where(retailers.id.in(retailerIds));
+    // Join with users table to get phone and email
+    const rows = await db
+      .select({
+        r_id: retailers.id,
+        r_userId: retailers.userId,
+        r_businessName: retailers.businessName,
+        r_ownerName: retailers.ownerName,
+        r_gstNumber: retailers.gstNumber,
+        r_businessType: retailers.businessType,
+        r_pincode: retailers.pincode,
+        r_state: retailers.state,
+        r_location: retailers.location,
+        r_address: retailers.address,
+        r_createdAt: retailers.createdAt,
+        
+        u_phone: users.phone,
+        u_email: users.email,
+      })
+      .from(retailers)
+      .leftJoin(users, eq(retailers.userId, users.id))
+      .where(inArray(retailers.id, retailerIds));
+
+    return rows.map(r => ({
+      id: r.r_id,
+      userId: r.r_userId,
+      businessName: r.r_businessName,
+      ownerName: r.r_ownerName,
+      gstNumber: r.r_gstNumber,
+      businessType: r.r_businessType,
+      pincode: r.r_pincode,
+      state: r.r_state,
+      location: r.r_location,
+      address: r.r_address,
+      phone: r.u_phone,
+      email: r.u_email,
+      createdAt: r.r_createdAt,
+    }));
   },
 
   async respondToRequest(distributorUserId, requestId, action, rejectionReason) {
@@ -63,8 +103,14 @@ export default {
     if (!req) throw new Error("Request not found");
 
     if (action === "approve") {
-      const approved = await ConnectionsRepo.approveRequest(requestId);
-      await ConnectionsRepo.createConnection(req.retailerId, req.distributorId);
+      // Both writes in one transaction - previously two separate statements,
+      // so a failure between them could leave an approved request with no
+      // connections row (P1-16).
+      const approved = await db.transaction(async (tx) => {
+        const row = await ConnectionsRepo.approveRequest(tx, requestId);
+        await ConnectionsRepo.createConnection(tx, req.retailerId, req.distributorId);
+        return row;
+      });
 
       publishEvent("connections.approved", approved);
       return { message: "Request approved" };
@@ -91,13 +137,38 @@ export default {
   },
 
   async suggestedDistributors(retailerUserId) {
-    const [retailer] = await db.select().from(retailers).where(eq(retailers.userId, retailerUserId));
+    const [retailer] = await db
+      .select()
+      .from(retailers)
+      .where(eq(retailers.userId, retailerUserId));
 
-    // Suggestions based on pincode + businessType
-    const distributors = await db.select().from(distributors).where(
-      distributors.pincode.eq(retailer.pincode)
-    );
-    return distributors;
+    if (!retailer) throw new Error("Retailer not found");
+
+    // 1️⃣ Get basic suggestions by pincode
+    const suggested = await db
+      .select()
+      .from(distributors)
+      .where(eq(distributors.pincode, retailer.pincode));
+
+    // 2️⃣ Get all requests made by this retailer
+    const allRequests = await ConnectionsRepo.getRetailerRequests(retailer.id);
+
+    // 3️⃣ Get all connected distributors
+    const connections = await ConnectionsRepo.getRetailerConnections(retailer.id);
+    const connectedDistributorIds = new Set(connections.map((c) => c.distributorId));
+
+    // 4️⃣ Inject requestStatus + connectionStatus for each distributor
+    const finalList = suggested.map((dist) => {
+      const req = allRequests.find((r) => r.distributorId === dist.id);
+
+      return {
+        ...dist,
+        requestStatus: req ? req.status : null,
+        connectionStatus: connectedDistributorIds.has(dist.id),
+      };
+    });
+
+    return finalList;
   },
 
   async searchRetailers(distributorUserId, filters) {
@@ -106,6 +177,45 @@ export default {
 
   async suggestedRetailers(distributorUserId) {
     const [dist] = await db.select().from(distributors).where(eq(distributors.userId, distributorUserId));
-    return db.select().from(retailers).where(eq(retailers.pincode, dist.pincode));
+    
+    if (!dist) throw new Error("Distributor not found");
+    
+    // Get suggested retailers with user data
+    const rows = await db
+      .select({
+        r_id: retailers.id,
+        r_userId: retailers.userId,
+        r_businessName: retailers.businessName,
+        r_ownerName: retailers.ownerName,
+        r_gstNumber: retailers.gstNumber,
+        r_businessType: retailers.businessType,
+        r_pincode: retailers.pincode,
+        r_state: retailers.state,
+        r_location: retailers.location,
+        r_address: retailers.address,
+        r_createdAt: retailers.createdAt,
+        
+        u_phone: users.phone,
+        u_email: users.email,
+      })
+      .from(retailers)
+      .leftJoin(users, eq(retailers.userId, users.id))
+      .where(eq(retailers.pincode, dist.pincode));
+    
+    return rows.map(r => ({
+      id: r.r_id,
+      userId: r.r_userId,
+      businessName: r.r_businessName,
+      ownerName: r.r_ownerName,
+      gstNumber: r.r_gstNumber,
+      businessType: r.r_businessType,
+      pincode: r.r_pincode,
+      state: r.r_state,
+      location: r.r_location,
+      address: r.r_address,
+      phone: r.u_phone,
+      email: r.u_email,
+      createdAt: r.r_createdAt,
+    }));
   }
 };

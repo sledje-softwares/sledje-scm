@@ -1,32 +1,31 @@
 import "dotenv/config";
 import http from "http";
-import express from "express";
 import app from "./app.js";
 import { initNats } from "./config/nats.js";
 import startSocketServer from "./realtime/socket.server.js";
-import startAllConsumers from "./consumers/index.js";
 
 const PORT = process.env.PORT || 5000;
 
 async function start() {
   try {
-    // 1️⃣ Initialize NATS FIRST
-    await initNats();
+    // NATS is still used by the realtime layer (Socket.IO fan-out) and by
+    // best-effort event publishing. The consumer chain that used to run here
+    // (orders.completed -> inventory -> product_bills -> ledger) has been
+    // replaced by a single transaction in orders.service.js:completeOrder -
+    // see docs/14-simplification.md. That is why NATS init failing here is
+    // no longer allowed to take the whole API down with it.
+    try {
+      await initNats();
+    } catch (e) {
+      console.warn("NATS unavailable - starting without realtime fan-out:", e.message);
+    }
 
-    // 2️⃣ Create HTTP server
     const server = http.createServer(app);
-
-    // 3️⃣ Start socket.io (uses NATS, so safe after init)
     startSocketServer(server);
 
-    // 4️⃣ Start all NATS consumers (MUST await)
-    await startAllConsumers();
-
-    // 5️⃣ Start HTTP listener
     server.listen(PORT, () => {
       console.log(`🌐 Server listening on http://localhost:${PORT}`);
     });
-
   } catch (err) {
     console.error("Failed to start server:", err);
     process.exit(1);

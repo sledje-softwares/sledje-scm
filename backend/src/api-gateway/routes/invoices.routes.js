@@ -6,9 +6,9 @@ import {
   listInvoices,
   getInvoice,
   getInvoicePDF,
+  createInvoice,
+  markInvoicePaid,
 } from "../controllers/invoices.controller.js";
-import InvoiceService from "../../modules/invoices/invoices.service.js";
-import { markInvoicePaid } from "../controllers/invoices.controller.js";
 const router = express.Router();
 
 /**
@@ -28,7 +28,7 @@ router.get("/:invoiceId", requireAuth, getInvoice);
  * Body: { periodType, start, end }
  * Only distributor may generate invoice for retailer
  */
-router.post("/generate", requireAuth, InvoiceService.generateInvoice);
+router.post("/generate", requireAuth, createInvoice);
 
 /**
  * GET /api/invoices/:invoiceId/pdf

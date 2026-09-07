@@ -11,7 +11,7 @@ import {
 } from "../../db/schema.js";
 
 import { eq, and, gte, lte } from "drizzle-orm";
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 import { generateInvoicePDF } from "../../utils/invoice-pdf.js";
 
 // ======= Helpers =======

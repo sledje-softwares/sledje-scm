@@ -4,8 +4,8 @@ import xlsx from "xlsx";
 
 export async function getProducts(req, res, next) {
   try {
-    const { distributorId, search, page = 1, limit = 20 } = req.query;
-    const data = await ProductsService.getProducts({ distributorId, search, page: Number(page), limit: Number(limit) });
+    const { distributorshipId, search, page = 1, limit = 20 } = req.query;
+    const data = await ProductsService.getCatalog({ distributorshipId, search, page: Number(page), limit: Number(limit) });
     res.json(data);
   } catch (err) {
     next(err);
@@ -41,7 +41,7 @@ export async function addProduct(req, res, next) {
     const distributorUserId = req.user.id;
     // require distributor id mapping inside service
     const payload = req.body;
-    const product = await ProductsService.createProduct(distributorUserId, payload);
+    const product = await ProductsService.createCatalogProduct(req.user, payload);
     res.status(201).json({ message: "Product added successfully", product });
   } catch (err) {
     next(err);
@@ -55,7 +55,7 @@ export async function updateProduct(req, res, next) {
     const distributorUserId = req.user.id;
     const { productId } = req.params;
     const payload = req.body;
-    const product = await ProductsService.updateProduct(distributorUserId, productId, payload);
+    const product = await ProductsService.updateCatalogProduct(req.user, productId, payload);
     res.json({ message: "Product updated successfully", product });
   } catch (err) {
     next(err);
@@ -68,7 +68,7 @@ export async function deleteProduct(req, res, next) {
 
     const distributorUserId = req.user.id;
     const { productId } = req.params;
-    await ProductsService.deleteProduct(distributorUserId, productId);
+    await ProductsService.deleteCatalogProduct(req.user, productId);
     res.json({ message: "Product deleted successfully" });
   } catch (err) {
     next(err);
@@ -103,7 +103,7 @@ export async function bulkImportProducts(req, res, next) {
     }
 
     // Pass logged-in distributor user id + rows
-    await ProductsService.bulkInsert(rows, req.user.id);
+    await ProductsService.bulkImportForDistributor(req.user.id, rows);
 
     res.json({ message: "Bulk import successful" });
   } catch (err) {

@@ -95,6 +95,14 @@ export async function processDistributorOrder(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Distributor marks the goods as having left the warehouse. */
+export async function dispatchOrder(req, res, next) {
+  try {
+    const order = await OrdersService.dispatchOrder(req.user, req.params.orderId);
+    res.json({ message: "Order dispatched", order });
+  } catch (err) { next(err); }
+}
+
 export async function updateOrderStatus(req, res, next) {
   try {
     const user = req.user;

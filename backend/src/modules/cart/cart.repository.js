@@ -1,10 +1,41 @@
 import { db } from "../../config/postgres.js";
-import { carts } from "../../db/schema.js";
+import { carts, productVariants, products, distributors, users } from "../../db/schema.js";
 import { eq, and } from "drizzle-orm";
 
 export default {
-  getCart(retailerId) {
-    return db.select().from(carts).where(eq(carts.retailerId, retailerId));
+  /**
+   * Cart rows joined to catalogue + distributor info. `carts` alone (id,
+   * variantId, distributorId, quantity, unit, price) has no product name,
+   * sku or distributor contact - a standalone cart page needs the join to
+   * render anything (P0-26: this used to crash instead, since it only ever
+   * received pre-enriched data as props from retailerShelf.js).
+   */
+  async getCart(retailerId) {
+    const rows = await db
+      .select({
+        id: carts.id,
+        variantId: carts.variantId,
+        distributorId: carts.distributorId,
+        quantity: carts.quantity,
+        unit: carts.unit,
+        price: carts.price,
+        sku: productVariants.sku,
+        variantName: productVariants.name,
+        productName: products.name,
+        productIcon: products.imageUrl,
+        distributorOwnerName: distributors.ownerName,
+        distributorCompanyName: distributors.companyName,
+        // phone lives on `users`, not `distributors` - joined through userId
+        distributorPhone: users.phone,
+      })
+      .from(carts)
+      .leftJoin(productVariants, eq(carts.variantId, productVariants.id))
+      .leftJoin(products, eq(productVariants.productId, products.id))
+      .leftJoin(distributors, eq(carts.distributorId, distributors.id))
+      .leftJoin(users, eq(distributors.userId, users.id))
+      .where(eq(carts.retailerId, retailerId));
+
+    return rows.map((r) => ({ ...r, totalPrice: Number(r.price || 0) * Number(r.quantity || 0) }));
   },
 
   async addToCart(retailerId, { variantId, distributorId, quantity, unit, price }) {

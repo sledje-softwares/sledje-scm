@@ -1,4 +1,4 @@
-import { publishEvent } from "../../events/jetstream.js";
+import { publishEvent } from "../../config/nats-streams.js";
 
 /**
  * Simple event helpers for auth module.

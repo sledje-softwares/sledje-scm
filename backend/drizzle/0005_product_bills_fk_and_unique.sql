@@ -1,0 +1,4 @@
+ALTER TABLE "product_bills" ADD CONSTRAINT "product_bills_retailer_id_retailers_id_fk" FOREIGN KEY ("retailer_id") REFERENCES "public"."retailers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_bills" ADD CONSTRAINT "product_bills_distributor_id_distributors_id_fk" FOREIGN KEY ("distributor_id") REFERENCES "public"."distributors"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_bills" ADD CONSTRAINT "product_bills_variant_id_product_variants_id_fk" FOREIGN KEY ("variant_id") REFERENCES "public"."product_variants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "product_bills" ADD CONSTRAINT "uq_product_bill" UNIQUE("retailer_id","distributor_id","variant_id");

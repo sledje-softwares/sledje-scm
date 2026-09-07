@@ -1,0 +1,1 @@
+ALTER TABLE "product_bills" DROP COLUMN "current_unit_cost";

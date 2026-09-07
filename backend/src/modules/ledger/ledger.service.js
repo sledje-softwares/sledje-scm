@@ -1,6 +1,6 @@
 import LedgerRepo from "./ledger.repository.js";
 import OrdersRepo from "../orders/orders.repository.js";
-import PaymentsRepo from "../payments/payments.repository.js";
+import ProductBillsRepo from "../product-bills/product-bills.repository.js";
 import { db } from "../../config/postgres.js";
 import { eq } from "drizzle-orm";
 import { productBills, productVariants, invoices } from "../../db/schema.js";
@@ -24,7 +24,7 @@ const LedgerService = {
   },
 
   async getLedgerForBill(user, billId) {
-    const bill = await PaymentsRepo.getBillById(billId);
+    const bill = await ProductBillsRepo.getBillById(billId);
     if (!bill) throw new Error("Bill not found");
 
     // Auth
@@ -83,10 +83,22 @@ const LedgerService = {
 
   // Complete combined statement
   async getFullStatement(user) {
+    // The JWT carries { id, role } where id is users.id - it has no entityId.
+    // The summary repo methods filter on user.entityId, so the profile id must be
+    // resolved here or every query silently matches nothing.
+    const profile =
+      user.role === "retailer"
+        ? await OrdersRepo.findRetailerByUserId(user.id)
+        : await OrdersRepo.findDistributorByUserId(user.id);
+
+    if (!profile) throw new Error("Profile not found");
+
+    const scoped = { ...user, entityId: profile.id };
+
     const core = await this.getLedgerForUser(user); // user-wide ledger
-    const bills = await LedgerRepo.getBillsWithRunningBalance(user);
-    const variants = await LedgerRepo.getVariantSummaries(user);
-    const invoicesList = await LedgerRepo.getInvoiceSummaries(user);
+    const bills = await LedgerRepo.getBillsWithRunningBalance(scoped);
+    const variants = await LedgerRepo.getVariantSummaries(scoped);
+    const invoicesList = await LedgerRepo.getInvoiceSummaries(scoped);
 
     return {
       ledger: core,

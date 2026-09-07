@@ -44,6 +44,7 @@ export async function getDistributorRequests(req, res, next) {
 export async function getConnectedRetailers(req, res, next) {
   try {
     const distributorUserId = req.user.id;
+    console.log("Distributor User ID:", distributorUserId);
     const data = await ConnectionsService.getConnectedRetailers(distributorUserId);
     res.json({ retailers: data });
   } catch (err) {

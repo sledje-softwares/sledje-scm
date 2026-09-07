@@ -1,11 +1,12 @@
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { db } from "../../config/postgres.js";
 import AuthRepo from "./auth.repository.js";
 import { sendOtpEmail } from "./email.service.js";
 import { publishUserRegistered, publishPasswordReset } from "./auth.events.js";
 import { eq } from "drizzle-orm";
+import { signToken, verifyToken } from "../../utils/jwt.js";
+import { generateOtp, otpExpiryDate } from "../../utils/otp.js";
 
 import {
   users,
@@ -15,13 +16,7 @@ import {
   otpCodes,
 } from "../../db/schema.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "please_change_this";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const SALT_ROUNDS = 10;
-
-function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-}
 
 export default {
   // ---------- REGISTER RETAILER ----------
@@ -237,4 +232,52 @@ export default {
       user: { id: user.id, email: user.email, role: user.role, distributor: distRow },
     };
   },
+
+  // ---------- FORGOT PASSWORD (generate OTP) ----------
+  async forgotPassword(email) {
+    const user = await AuthRepo.findUserByEmail(email);
+    if (!user) {
+      // do not reveal whether email exists
+      return;
+    }
+
+    // Cryptographically-random OTP with a TTL from OTP_TTL_MINUTES, rather
+    // than Math.random() (not a CSPRNG) and a hardcoded 10-minute window.
+    const otp = generateOtp(6);
+    const expiresAt = otpExpiryDate();
+
+    // save OTP (simple insert into otp_codes table)
+    await AuthRepo.saveOtp({ email, otp, expiresAt });
+
+    // send email (async)
+    sendOtpEmail(email, otp).catch((e) => console.warn("sendOtpEmail failed:", e.message));
+  },
+
+  // ---------- VERIFY OTP ----------
+  async verifyOtp(email, otp) {
+    // uses AuthRepo.getValidOtp — returns row if OTP exists and not expired
+    const row = await AuthRepo.getValidOtp(email, otp);
+    return !!row;
+  },
+
+  // ---------- RESET PASSWORD ----------
+  async resetPassword(email, otp, newPassword) {
+    const row = await AuthRepo.getValidOtp(email, otp);
+    if (!row) throw new Error("Invalid or expired OTP");
+
+    // find user
+    const user = await AuthRepo.findUserByEmail(email);
+    if (!user) throw new Error("User not found");
+
+    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await AuthRepo.updatePassword(user.id, hashed);
+    await AuthRepo.deleteOtp(email);
+
+    // publish event
+    publishPasswordReset({ userId: user.id, email }).catch((e) => console.warn(e.message));
+  },
+
+  // ---------- helper: verify token (used by middleware) ----------
+  verifyToken,
 };            

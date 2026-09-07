@@ -22,7 +22,7 @@ export default {
   async markFailed(id, errorMessage) {
     await db
       .update(outbox)
-      .set({ error: errorMessage }) // optional column if you add it
+      .set({ error: errorMessage })
       .where(eq(outbox.id, id));
   }
 };
