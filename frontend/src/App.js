@@ -8,7 +8,7 @@ import { AuthProvider } from "./components/AuthContext";
 // Pages
 import Home from "./pages/Landing/Home";
 import RetailerLayout from "./pages/Retailers/retailerLayout";
-import RetailerShop from "./pages/Retailers/retailerShop";
+import RetailerPOS from "./pages/Retailers/retailerPOS";
 import RetailerShelf from "./pages/Retailers/retailerShelf";
 import RetailerCart from "./pages/Retailers/retailerCart";
 import RetailerOrders from "./pages/Retailers/retailerOrders";
@@ -47,6 +47,12 @@ import Retailers from "./pages/Landing/Partners/Retailers";
 import Distributors from "./pages/Landing/Partners/Distributors";
 import DeliveryPartners from "./pages/Landing/Partners/DeliveryPartners";
 
+// Delivery agent app
+import AgentAuth from "./pages/Agent/agentAuth";
+import AgentLayout from "./pages/Agent/agentLayout";
+import AgentRuns from "./pages/Agent/agentRuns";
+import AgentProfile from "./pages/Agent/agentProfile";
+
 // Not Found Page
 import NotFound from "./components/NotFound";
 
@@ -77,13 +83,29 @@ function App() {
           
         >
           {/* Redirect /layout to /layout/shop */}
-          <Route index element={<Navigate to="shop" replace />} />
-          <Route path="shop" element={<RetailerShop />} />
+          <Route index element={<Navigate to="pos" replace />} />
+          <Route path="pos" element={<RetailerPOS />} />
           <Route path="shelf" element={<RetailerShelf />} />
           <Route path="cart" element={<RetailerCart />} />
           <Route path="orders" element={<RetailerOrders />} />
           <Route path="payment" element={<RetailerPayment />} />
           <Route path="you" element={<RetailerYou />} />
+        </Route>
+
+        {/* Delivery agent app */}
+        <Route path="/agent/login" element={<AgentAuth mode="login" />} />
+        <Route path="/agent/register" element={<AgentAuth mode="register" />} />
+        <Route
+          path="/agent"
+          element={
+            <PrivateRoute allowedRole="delivery_agent">
+              <AgentLayout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<Navigate to="runs" replace />} />
+          <Route path="runs" element={<AgentRuns />} />
+          <Route path="profile" element={<AgentProfile />} />
         </Route>
 
         <Route path="/distributor" element={<PrivateRoute allowedRole="distributor"><DistributorLayout /></PrivateRoute>}>

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { PlaneLanding, Library, BanknoteArrowUp, Landmark, User, ScanBarcode, MoreVertical, LogOut } from "lucide-react";
 import { useAuth } from "../../components/AuthContext.js"; // Import the AuthContext
-import API from "../../api"; // Adjust the import based on your project structure
+import NotificationBell from "../../components/NotificationBell.js";
 
 function TogglingPaymentIcon() {
   const [showFirst, setShowFirst] = useState(true);
@@ -28,7 +28,7 @@ function TogglingPaymentIcon() {
 
 export default function RetailerLayout() {
   const navItems = [
-    { name: "Shop", to: "/retailer/shop", icon: ScanBarcode },
+    { name: "Sell", to: "/retailer/pos", icon: ScanBarcode },
     { name: "Shelf", to: "/retailer/shelf", icon: Library },
     { name: "Payments", to: "/retailer/payment", icon: TogglingPaymentIcon },
     { name: "Orders", to: "/retailer/orders", icon: PlaneLanding },
@@ -112,8 +112,9 @@ export default function RetailerLayout() {
               </div>
             </div>
 
-            {/* Right Section: Logout Button - Hidden on mobile */}
-            <div className="hidden md:block">
+            {/* Right Section: notifications + Logout - Hidden on mobile */}
+            <div className="hidden md:flex items-center gap-1">
+              <NotificationBell role="retailer" />
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-slate-700 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -123,8 +124,9 @@ export default function RetailerLayout() {
               </button>
             </div>
 
-            {/* Mobile Dropdown Toggle Button */}
-            <div className="md:hidden mobile-dropdown-container relative ml-2">
+            {/* Mobile: notifications + dropdown toggle */}
+            <div className="md:hidden flex items-center mobile-dropdown-container relative ml-2">
+              <NotificationBell role="retailer" />
               <button
                 onClick={() => setShowMobileDropdown(!showMobileDropdown)}
                 className={`p-2 rounded-lg transition-colors duration-200 ${showMobileDropdown

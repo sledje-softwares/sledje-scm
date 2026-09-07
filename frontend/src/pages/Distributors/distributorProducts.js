@@ -147,13 +147,23 @@ export default function DistributorProducts() {
     return Array.from(map.values());
   }, [inventory]);
 
+  const outForDeliveryCount = React.useMemo(
+    () => inventory.filter(i => Number(i.outForDelivery) > 0).length,
+    [inventory]
+  );
+
   const filteredInventory = inventory.filter(item => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = (
       item.variant?.name?.toLowerCase().includes(term) ||
       item.variant?.sku?.toLowerCase().includes(term)
     );
-    const matchesTab = activeTab === "all" || item.distributorship?.id === activeTab;
+    const matchesTab =
+      activeTab === "all"
+        ? true
+        : activeTab === "out_for_delivery"
+          ? Number(item.outForDelivery) > 0
+          : item.distributorship?.id === activeTab;
 
     return matchesSearch && matchesTab;
   });
@@ -217,6 +227,20 @@ export default function DistributorProducts() {
         >
           All Products
         </button>
+        <button
+          onClick={() => setActiveTab("out_for_delivery")}
+          className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === "out_for_delivery"
+            ? "border-indigo-600 text-indigo-600"
+            : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+        >
+          Out for delivery
+          {outForDeliveryCount > 0 && (
+            <span className="bg-indigo-100 text-indigo-700 text-xs px-1.5 rounded-full">
+              {outForDeliveryCount}
+            </span>
+          )}
+        </button>
         {uniqueDistributorships.map(d => (
           <button
             key={d.id}
@@ -279,16 +303,28 @@ export default function DistributorProducts() {
                     <p className="text-sm text-slate-500">SKU: {item.variant?.sku}</p>
                   </div>
 
-                  <div className="mt-auto grid grid-cols-2 gap-4 text-sm">
+                  <div className="mt-auto grid grid-cols-3 gap-3 text-sm">
                     <div>
-                      <p className="text-slate-500 text-xs">Stock</p>
-                      <p className={`font-medium ${isLowStock ? 'text-amber-600' : 'text-slate-900'}`}>{item.stock} units</p>
+                      <p className="text-slate-500 text-xs">On hand</p>
+                      <p className={`font-medium ${isLowStock ? 'text-amber-600' : 'text-slate-900'}`}>{item.stock}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500 text-xs">Selling Price</p>
-                      <p className="font-medium text-slate-900">₹{item.sellingPrice}</p>
+                      <p className="text-slate-500 text-xs">Out for delivery</p>
+                      <p className={`font-medium ${Number(item.outForDelivery) > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>
+                        {item.outForDelivery || 0}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 text-xs">Sell ₹</p>
+                      <p className="font-medium text-slate-900">{item.sellingPrice}</p>
                     </div>
                   </div>
+                  {Number(item.outForDelivery) > 0 && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {Math.max(0, Number(item.stock) - Number(item.outForDelivery))} available to sell
+                      — {item.outForDelivery} committed to open deliveries
+                    </p>
+                  )}
 
                   <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
                     <button

@@ -6,8 +6,38 @@ import {
   productBillTransactions,
   productDeliveryLog,
   outbox,
+  productVariants,
+  products,
+  distributors,
+  retailers,
 } from "../../db/schema.js";
 import { and, eq, sql } from "drizzle-orm";
+
+// The columns the payment screens need alongside the raw bill: what the SKU is
+// called and who the counterparty is. product_bills stores only ids.
+const billSelection = {
+  id: productBills.id,
+  retailerId: productBills.retailerId,
+  distributorId: productBills.distributorId,
+  variantId: productBills.variantId,
+  outstandingBalance: productBills.outstandingBalance,
+  totalAmountPaid: productBills.totalAmountPaid,
+  totalAmountDue: productBills.totalAmountDue,
+  totalQuantityDelivered: productBills.totalQuantityDelivered,
+  qtyReceivedUnsold: productBills.qtyReceivedUnsold,
+  amountReceivedNotDue: productBills.amountReceivedNotDue,
+  qtySold: productBills.qtySold,
+  lastTransactionDate: productBills.lastTransactionDate,
+  createdAt: productBills.createdAt,
+  updatedAt: productBills.updatedAt,
+  variantName: productVariants.name,
+  sku: productVariants.sku,
+  unit: productVariants.unit,
+  mrp: productVariants.mrp,
+  productName: products.name,
+  category: products.category,
+  imageUrl: products.imageUrl,
+};
 
 const ProductBillsRepo = {
   async findBillByVariant(retailerId, distributorId, variantId) {
@@ -203,8 +233,14 @@ const ProductBillsRepo = {
     if (distributorId) conditions.push(eq(productBills.distributorId, distributorId));
 
     const rows = await db
-      .select()
+      .select({
+        ...billSelection,
+        distributorName: distributors.companyName,
+      })
       .from(productBills)
+      .leftJoin(productVariants, eq(productBills.variantId, productVariants.id))
+      .leftJoin(products, eq(productVariants.productId, products.id))
+      .leftJoin(distributors, eq(productBills.distributorId, distributors.id))
       .where(and(...conditions))
       .orderBy(productBills.updatedAt)
       .limit(limit)
@@ -221,8 +257,14 @@ const ProductBillsRepo = {
     if (variantId) conditions.push(eq(productBills.variantId, variantId));
 
     const rows = await db
-      .select()
+      .select({
+        ...billSelection,
+        retailerName: retailers.businessName,
+      })
       .from(productBills)
+      .leftJoin(productVariants, eq(productBills.variantId, productVariants.id))
+      .leftJoin(products, eq(productVariants.productId, products.id))
+      .leftJoin(retailers, eq(productBills.retailerId, retailers.id))
       .where(and(...conditions))
       .orderBy(productBills.updatedAt)
       .limit(limit)

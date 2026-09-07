@@ -1,8 +1,11 @@
 import axios from "axios";
 
+// The backend mounts most routers at the root (a few sit under /api). The axios
+// baseURL must therefore NOT carry an /api suffix - individual calls that need
+// it (e.g. /api/distributor-inventory) spell it out. Override per environment
+// with REACT_APP_API_URL; default to the deployed host.
 const API = axios.create({
-  baseURL: "https://sledjeweb-2.onrender.com/api", // backend URL
-  //baseURL: "http://localhost:5000", // for local development
+  baseURL: process.env.REACT_APP_API_URL || "https://sledjeweb-2.onrender.com",
 });
 
 // If you want to attach token for logged-in routes later:

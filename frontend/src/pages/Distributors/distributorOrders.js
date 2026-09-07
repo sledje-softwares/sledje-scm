@@ -6,18 +6,15 @@ import {
   XCircle,
   AlertTriangle,
   Eye,
-  Filter,
   Search,
   Bell,
   Package,
-  Calendar,
   DollarSign,
   User,
   Phone,
   Mail,
   Edit3,
   Truck,
-  ArrowRight,
   Check,
   X,
   FileText,
@@ -40,19 +37,37 @@ const DistributorOrderManagement = () => {
   const [modifiedItems, setModifiedItems] = useState([]);
   const [modificationNotes, setModificationNotes] = useState('');
 
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const res = await API.get('/orders/distributor/orders');
+      setOrders(res.data.data || []);
+    } catch {
+      setOrders([]);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const res = await API.get('/orders/distributor/orders');
-        setOrders(res.data.data || []);
-      } catch {
-        setOrders([]);
-      }
-      setLoading(false);
-    };
     fetchOrders();
   }, []);
+
+  const [assignFor, setAssignFor] = useState(null); // order awaiting an agent
+
+  const dispatchOrder = async (order) => {
+    setLoading(true);
+    try {
+      await API.put(`/orders/distributor/orders/${order.id}/dispatch`);
+      setToast({ message: `${order.orderNumber} dispatched — assign a delivery agent next.`, type: 'success' });
+      await fetchOrders();
+    } catch (error) {
+      setToast({ message: error.response?.data?.error || 'Could not dispatch order', type: 'error' });
+    }
+    setLoading(false);
+  };
+
+  const prettyStatus = (status) =>
+    (status || "").replace(/_/g, " ");
 
   const getStatusIcon = (status) => {
     const iconProps = { size: 16 };
@@ -60,7 +75,12 @@ const DistributorOrderManagement = () => {
       case 'pending':
         return <Clock {...iconProps} className="text-amber-500" />;
       case 'processing':
-        return <Truck {...iconProps} className="text-blue-500" />;
+        return <Package {...iconProps} className="text-blue-500" />;
+      case 'dispatched':
+        return <Truck {...iconProps} className="text-indigo-500" />;
+      case 'out_for_delivery':
+        return <Truck {...iconProps} className="text-violet-500" />;
+      case 'delivered':
       case 'completed':
         return <CheckCircle {...iconProps} className="text-emerald-500" />;
       case 'cancelled':
@@ -78,6 +98,11 @@ const DistributorOrderManagement = () => {
         return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'processing':
         return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'dispatched':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'out_for_delivery':
+        return 'bg-violet-50 text-violet-700 border-violet-200';
+      case 'delivered':
       case 'completed':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       case 'cancelled':
@@ -98,7 +123,7 @@ const DistributorOrderManagement = () => {
 
   const filteredOrders = orders.filter(order => {
     const orderNumber = order.orderNumber || "";
-    const retailerName = (order.retailer && order.retailer.name) ? order.retailer.name : "";
+    const retailerName = order.retailer?.businessName || "";
     const matchesSearch =
       orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       retailerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -106,32 +131,23 @@ const DistributorOrderManagement = () => {
     return matchesSearch && matchesTab;
   });
 
-  const handleOrderAction = async (order, action) => {
-    setLoading(true);
-    try {
-      const res = await API.get(`/orders/distributor/orders/${order.id}`);
-      setSelectedOrder(res.data.data);
+  const handleOrderAction = (order, action) => {
+    // The list rows are already fully enriched (retailer, items, delivery),
+    // so there is no need for a second round-trip here.
+    setSelectedOrder(order);
 
-      // Initialize modified items for modification action
-      if (action === 'modify') {
-        setModifiedItems(res.data.data.items.map(item => ({
-          ...item,
-          originalQuantity: item.quantity,
-          newQuantity: item.quantity,
-          isModified: false
-        })));
-        setModificationNotes('');
-      }
-
-      setActionType(action);
-      setShowOrderModal(true);
-    } catch (error) {
-      setToast({
-        message: "Failed to fetch order details",
-        type: 'error'
-      });
+    if (action === 'modify') {
+      setModifiedItems((order.items || []).map(item => ({
+        ...item,
+        originalQuantity: item.quantity,
+        newQuantity: item.quantity,
+        isModified: false
+      })));
+      setModificationNotes('');
     }
-    setLoading(false);
+
+    setActionType(action);
+    setShowOrderModal(true);
   };
 
   const handleQuantityChange = (itemIndex, newQuantity) => {
@@ -218,18 +234,12 @@ const DistributorOrderManagement = () => {
 
         apiData = { action: 'modify', modifications };
         successMessage = `Modification request sent for order to ${selectedOrder.retailer.businessName}.`;
-      } else if (actionType === 'complete') {
-        await API.put(`orders/distributor/orders/${selectedOrder._id}/status`, { status: 'completed' });
-        successMessage = `Order from ${selectedOrder.retailer.businessName} marked as completed!`;
       }
 
-      if (actionType !== 'complete') {
-        await API.put(`orders/distributor/orders/${selectedOrder._id}/process`, apiData);
-      }
+      await API.put(`/orders/distributor/orders/${selectedOrder.id}/process`, apiData);
 
-      // Refresh orders after action
-      const res = await API.get('orders/distributor/order');
-      setOrders(res.data.data || []);
+      // Refresh orders after action (was GET .../order — singular, 404s)
+      await fetchOrders();
       setShowOrderModal(false);
       setRejectionReason('');
       setModifiedItems([]);
@@ -344,14 +354,35 @@ const DistributorOrderManagement = () => {
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <User className="w-3 h-3 text-slate-400" />
-              <span className="text-xs text-slate-600">{order.retailer.name}</span>
+              <span className="text-xs text-slate-600">{order.retailer.ownerName || order.retailer.businessName}</span>
             </div>
             <div className="flex items-center space-x-2">
               <Phone className="w-3 h-3 text-slate-400" />
-              <span className="text-xs text-slate-600">{order.retailer.phone}</span>
+              <span className="text-xs text-slate-600">{order.retailer.phone || '—'}</span>
             </div>
           </div>
         </div>
+
+        {order.delivery && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Truck className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-medium text-indigo-800">
+                  {order.delivery.agentName
+                    ? `${order.delivery.agentName}`
+                    : 'Awaiting agent assignment'}
+                </span>
+              </div>
+              <span className="text-xs font-medium text-indigo-600 capitalize">
+                {prettyStatus(order.delivery.status)}
+              </span>
+            </div>
+            {order.delivery.agentPhone && (
+              <p className="text-xs text-indigo-600 mt-1">{order.delivery.agentPhone}</p>
+            )}
+          </div>
+        )}
 
         {order.notes && (
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
@@ -404,13 +435,24 @@ const DistributorOrderManagement = () => {
             )}
             {order.status === 'processing' && (
               <button
-                onClick={() => handleOrderAction(order, 'complete')}
-                className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                onClick={() => dispatchOrder(order)}
+                disabled={loading}
+                className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
               >
                 <Truck className="w-4 h-4" />
-                <span>Mark Complete</span>
+                <span>Dispatch</span>
               </button>
             )}
+            {['dispatched', 'out_for_delivery'].includes(order.status) &&
+              (!order.delivery?.agentId) && (
+                <button
+                  onClick={() => setAssignFor(order)}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Assign agent</span>
+                </button>
+              )}
           </div>
         </div>
       </div>
@@ -545,7 +587,7 @@ const DistributorOrderManagement = () => {
                             <div className="text-sm text-slate-500">per {item.unit}</div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-sm text-slate-600">{item.variantSku}</td>
+                        <td className="py-3 px-4 text-sm text-slate-600">{item.sku}</td>
                         <td className="py-3 px-4 text-right">
                           {actionType === 'modify' ? (
                             <div className="flex items-center justify-end space-x-2">
@@ -562,12 +604,12 @@ const DistributorOrderManagement = () => {
                                 onChange={(e) => handleQuantityChange(index, e.target.value)}
                                 className="w-16 px-2 py-1 text-sm border border-slate-300 rounded text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 min="0"
-                                max={item.variantStock}
+                                max={item.stock}
                               />
                               <button
                                 onClick={() => handleQuantityChange(index, item.newQuantity + 1)}
                                 className="p-1 hover:bg-slate-100 rounded border border-slate-200"
-                                disabled={item.newQuantity >= item.variantStock}
+                                disabled={item.newQuantity >= item.stock}
                               >
                                 <Plus className="w-3 h-3 text-slate-600" />
                               </button>
@@ -578,11 +620,11 @@ const DistributorOrderManagement = () => {
                         </td>
                         <td className="py-3 px-4 text-right text-slate-600">₹{item.variantSellingPrice}</td>
                         <td className="py-3 px-4 text-right">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.variantStock < (actionType === 'modify' ? item.newQuantity : item.quantity) ? 'bg-red-100 text-red-800' :
-                              item.variantStock < (actionType === 'modify' ? item.newQuantity : item.quantity) * 2 ? 'bg-amber-100 text-amber-800' :
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.stock < (actionType === 'modify' ? item.newQuantity : item.quantity) ? 'bg-red-100 text-red-800' :
+                              item.stock < (actionType === 'modify' ? item.newQuantity : item.quantity) * 2 ? 'bg-amber-100 text-amber-800' :
                                 'bg-emerald-100 text-emerald-800'
                             }`}>
-                            {item.variantStock} available
+                            {item.stock} available
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-medium text-slate-900">
@@ -692,7 +734,6 @@ const DistributorOrderManagement = () => {
               <div className="relative">
                 <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors rounded-full hover:bg-slate-100">
                   <Bell className="w-6 h-6" />
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
                 </button>
               </div>
             </div>
@@ -705,7 +746,7 @@ const DistributorOrderManagement = () => {
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex space-x-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
-              {['pending', 'processing', 'completed', 'cancelled'].map(tab => (
+              {['pending', 'processing', 'dispatched', 'out_for_delivery', 'delivered', 'cancelled'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -714,7 +755,7 @@ const DistributorOrderManagement = () => {
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  <span className="capitalize">{prettyStatus(tab)}</span>
                 </button>
               ))}
             </div>
@@ -767,6 +808,17 @@ const DistributorOrderManagement = () => {
 
       {/* Modal */}
       {showOrderModal && <OrderModal />}
+      {assignFor && (
+        <AssignAgentModal
+          order={assignFor}
+          onClose={() => setAssignFor(null)}
+          onAssigned={async () => {
+            setAssignFor(null);
+            await fetchOrders();
+          }}
+          setToast={setToast}
+        />
+      )}
       {toast && (
         <Toast
           message={toast.message}
@@ -777,5 +829,83 @@ const DistributorOrderManagement = () => {
     </div>
   );
 };
+
+function AssignAgentModal({ order, onClose, onAssigned, setToast }) {
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(null);
+
+  useEffect(() => {
+    API.get('/deliveries/agents/available')
+      .then((r) => setAgents(r.data.agents || []))
+      .catch(() => setAgents([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const assign = async (agentId) => {
+    setAssigning(agentId);
+    try {
+      await API.put(`/deliveries/${order.delivery.id}/assign`, { agentId });
+      setToast({ message: 'Delivery agent assigned', type: 'success' });
+      onAssigned();
+    } catch (e) {
+      setToast({ message: e.response?.data?.error || 'Could not assign agent', type: 'error' });
+      setAssigning(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md border border-slate-200 flex flex-col max-h-[80vh]">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Assign delivery agent</h2>
+            <p className="text-xs text-slate-500">
+              {order.orderNumber} → {order.retailer?.businessName}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        <div className="p-4 overflow-y-auto flex-1">
+          {loading ? (
+            <p className="text-sm text-slate-400">Loading available agents…</p>
+          ) : agents.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No agents are marked available right now. Agents self-register and toggle their
+              own availability.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {agents.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between p-3 border border-slate-200 rounded-lg"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{a.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {a.phone || '—'}
+                      {a.vehicleNumber ? ` · ${a.vehicleNumber}` : ''}
+                      {a.operatingPincode ? ` · ${a.operatingPincode}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => assign(a.id)}
+                    disabled={!!assigning}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {assigning === a.id ? 'Assigning…' : 'Assign'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default DistributorOrderManagement;

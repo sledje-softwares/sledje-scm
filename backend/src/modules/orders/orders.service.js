@@ -186,28 +186,25 @@ export default {
     if (user.role !== "retailer") throw new Error("Only retailers allowed");
     const retailer = await OrdersRepo.findRetailerByUserId(user.id);
     if (!retailer) throw new Error("Retailer not found");
-    const rows = await OrdersRepo.findOrdersByRetailerId(retailer.id);
-    // Optionally join items
-    const results = [];
-    for (const r of rows) {
-      const items = await OrdersRepo.getOrderItems(r.id);
-      results.push({ ...r, items });
-    }
-    return results;
+    return OrdersRepo.listOrdersEnriched({ retailerId: retailer.id });
   },
 
   async getRetailerOrder(user, orderId) {
     if (user.role !== "retailer") throw new Error("Only retailers allowed");
     const retailer = await OrdersRepo.findRetailerByUserId(user.id);
-    const order = await OrdersRepo.findOrderWithItems(orderId);
-    if (!order) throw new Error("Order not found");
-    if (order.retailerId !== retailer.id) throw new Error("Not owner of order");
+    const bare = await OrdersRepo.findOrderById(orderId);
+    if (!bare) throw new Error("Order not found");
+    if (bare.retailerId !== retailer.id) throw new Error("Not owner of order");
+
+    const all = await OrdersRepo.listOrdersEnriched({ retailerId: retailer.id });
+    const order = all.find((o) => o.id === orderId) || bare;
 
     // The delivery code is only ever surfaced to the retailer who owns the
     // order, and only while it has not been consumed - never to a
-    // distributor, never in a notification or log line.
+    // distributor, never in a notification or log line. The retailer hands it
+    // to the delivery agent at the door.
     let deliveryCode = null;
-    if (order.status !== "completed") {
+    if (!["delivered", "completed", "cancelled"].includes(order.status)) {
       const codeRow = await DeliveryCodeRepo.get(orderId);
       if (codeRow && !codeRow.consumedAt) {
         deliveryCode = decryptCode(codeRow);
@@ -411,13 +408,7 @@ export default {
   async getDistributorOrders(user) {
     if (user.role !== "distributor") throw new Error("Only distributors allowed");
     const dist = await OrdersRepo.findDistributorByUserId(user.id);
-    const rows = await OrdersRepo.findOrdersByDistributorId(dist.id);
-    const results = [];
-    for (const r of rows) {
-      const items = await OrdersRepo.getOrderItems(r.id);
-      results.push({ ...r, items });
-    }
-    return results;
+    return OrdersRepo.listOrdersEnriched({ distributorId: dist.id });
   },
 
   async getDistributorOrder(user, orderId) {

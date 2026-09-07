@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { PlaneTakeoff, BanknoteArrowUp, Landmark, User, ScanBarcode, MoreVertical, LogOut } from "lucide-react";
 import { useAuth } from "../../components/AuthContext.js"; // Import the AuthContext
+import NotificationBell from "../../components/NotificationBell.js";
 
 function TogglingPaymentIcon() {
   const [showFirst, setShowFirst] = useState(true);
@@ -130,8 +131,9 @@ export default function Layout() {
               </div>
             </div>
 
-            {/* Right Section: Logout Button - Hidden on mobile, but add mobile dropdown trigger */}
-            <div className="hidden md:block">
+            {/* Right Section: notifications + Logout - Hidden on mobile */}
+            <div className="hidden md:flex items-center gap-2">
+              <NotificationBell role="distributor" />
               <button
                 onClick={handleLogout}
                 className="bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-sm"
@@ -140,8 +142,9 @@ export default function Layout() {
               </button>
             </div>
 
-            {/* Mobile Dropdown Toggle Button */}
-            <div className="md:hidden mobile-dropdown-container relative">
+            {/* Mobile: notifications + dropdown toggle */}
+            <div className="md:hidden flex items-center mobile-dropdown-container relative">
+              <NotificationBell role="distributor" />
               <button
                 onClick={() => setShowMobileDropdown(!showMobileDropdown)}
                 className={`p-2 rounded-lg transition-colors duration-200 ${showMobileDropdown

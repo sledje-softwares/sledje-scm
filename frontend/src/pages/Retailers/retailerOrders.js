@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import API from "../../api";
 import {
-  ShoppingCart, Clock, CheckCircle, XCircle, AlertTriangle, Eye, Plus, Filter, Search, Bell,
+  ShoppingCart, Clock, CheckCircle, XCircle, AlertTriangle, Eye, Plus, Filter, Search,
   Package, Calendar, DollarSign, ArrowRight, RefreshCw, FileText, X, Check, Edit, Truck,
   User, Phone, Mail, MapPin, ArrowLeft, Trash2, Save, Download, Upload, MessageSquare,
   History, Settings, AlertCircle
@@ -9,10 +9,8 @@ import {
 
 const RetailerOrders = () => {
   const [orders, setOrders] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showCreateOrder, setShowCreateOrder] = useState(false);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,12 +26,9 @@ const RetailerOrders = () => {
   const [editMode, setEditMode] = useState(false);
   const [editOrderData, setEditOrderData] = useState({ items: [], notes: '' });
 
-  // Fetch orders and notifications from backend
   useEffect(() => {
     fetchOrders();
-    fetchNotifications();
     fetchDistributors();
-    fetchProducts();
   }, []);
 
   const fetchOrders = async () => {
@@ -48,32 +43,12 @@ const RetailerOrders = () => {
     setLoading(false);
   };
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await API.get('/notifications');
-      setNotifications(res.data.data.notifications || []);
-    } catch (e) {
-      setNotifications([]);
-    }
-  };
-
   const fetchDistributors = async () => {
-    // Replace with your actual API endpoint for distributors
     try {
-      const res = await API.get('orders/distributors');
-      setDistributors(res.data.data || []);
+      const res = await API.get('/connections/retailer/distributors');
+      setDistributors(res.data.distributors || res.data || []);
     } catch {
       setDistributors([]);
-    }
-  };
-
-  const fetchProducts = async () => {
-    // Replace with your actual API endpoint for products
-    try {
-      const res = await API.get('orders/products');
-      setProducts(res.data.data || []);
-    } catch {
-      setProducts([]);
     }
   };
 
@@ -96,30 +71,11 @@ const RetailerOrders = () => {
     setLoading(false);
   };
 
-  // Complete order: the retailer confirms delivery with the code that was
-  // issued to them when they placed the order (docs/15-delivery-confirmation.md).
-  // The code is the retailer's, not the distributor's - they hand it to the
-  // delivery agent at the door.
-  const handleCompleteOrder = async (orderId) => {
-    const code = prompt("Enter your 6-digit delivery code for this order:");
-    if (!code || code.length !== 6) {
-      alert("Invalid code.");
-      return;
-    }
-    setLoading(true);
-    try {
-      // The backend verifies the code and, in the same transaction, updates
-      // stock, the product bill and the ledger. Do NOT also call
-      // /inventory/checkout here - that would add the delivered quantity to
-      // the shelf a second time.
-      await API.put(`/orders/retailer/orders/${orderId}/complete`, { code });
-      fetchOrders();
-      alert("Order completed and inventory updated!");
-    } catch (e) {
-      alert(e.response?.data?.error || e.response?.data?.message || "Failed to complete order");
-    }
-    setLoading(false);
-  };
+  // The retailer no longer confirms their own delivery. The delivery agent
+  // confirms it on arrival by entering the code the retailer received at order
+  // creation (docs/15-delivery-confirmation.md) - so the retailer's job is
+  // simply to read that code out. It is shown on the order detail view while
+  // the order is in transit.
 
   // Cancel order
   const handleCancelOrder = async (orderId, reason) => {
@@ -176,7 +132,7 @@ const RetailerOrders = () => {
     setLoading(true);
     console.log(selectedOrder);
     try {
-      await API.put(`/orders/retailer/orders/${selectedOrder._id}/modify`, {
+      await API.put(`/orders/retailer/orders/${selectedOrder.id}/modify`, {
         items: editOrderData.items.map(({ sku, quantity, unit }) => ({ sku, quantity, unit })),
         notes: editOrderData.notes
       });
@@ -224,7 +180,7 @@ const RetailerOrders = () => {
                 </button>
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900">{selectedOrder.orderNumber}</h2>
-                  <p className="text-sm text-slate-500">{selectedOrder.distributor?.businessName || selectedOrder.distributorId}</p>
+                  <p className="text-sm text-slate-500">{selectedOrder.distributor?.companyName || selectedOrder.distributorId}</p>
                 </div>
               </div>
               <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(selectedOrder.status)}`}>
@@ -235,6 +191,31 @@ const RetailerOrders = () => {
           </div>
 
           <div className="p-6 space-y-6">
+            {/* Delivery code — the retailer reads this to the agent on arrival */}
+            {selectedOrder.deliveryCode &&
+              ['dispatched', 'out_for_delivery', 'processing'].includes(selectedOrder.status) && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <Truck className="w-5 h-5 text-indigo-600" />
+                    <h3 className="font-semibold text-indigo-800">Delivery code</h3>
+                  </div>
+                  <p className="text-sm text-indigo-700 mb-3">
+                    Give this to the delivery agent when they arrive. They enter it to confirm
+                    the handover — that is what puts the stock on your shelf.
+                  </p>
+                  <div className="text-3xl font-bold tracking-[0.3em] text-indigo-900">
+                    {selectedOrder.deliveryCode}
+                  </div>
+                  {selectedOrder.delivery?.agentName && (
+                    <p className="text-xs text-indigo-600 mt-2">
+                      Agent: {selectedOrder.delivery.agentName}
+                      {selectedOrder.delivery.agentPhone ? ` · ${selectedOrder.delivery.agentPhone}` : ''}
+                      {' · '}{prettyStatus(selectedOrder.delivery.status)}
+                    </p>
+                  )}
+                </div>
+              )}
+
             {/* Pending Actions */}
             {selectedOrder.status === 'pending' && !editMode && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -408,17 +389,22 @@ const RetailerOrders = () => {
     );
   };
 
+  const prettyStatus = (status) => (status || '').replace(/_/g, ' ');
+
   const getStatusIcon = (status) => {
     const iconProps = { size: 16 };
     switch (status) {
       case 'pending':
         return <Clock {...iconProps} className="text-amber-600" />;
-      case 'confirmed':
-        return <CheckCircle {...iconProps} className="text-indigo-600" />;
-      case 'shipped':
-        return <Truck {...iconProps} className="text-purple-600" />;
+      case 'processing':
+        return <Package {...iconProps} className="text-blue-600" />;
+      case 'dispatched':
+        return <Truck {...iconProps} className="text-indigo-600" />;
+      case 'out_for_delivery':
+        return <Truck {...iconProps} className="text-violet-600" />;
       case 'delivered':
-        return <Package {...iconProps} className="text-emerald-600" />;
+      case 'completed':
+        return <CheckCircle {...iconProps} className="text-emerald-600" />;
       case 'cancelled':
         return <XCircle {...iconProps} className="text-red-600" />;
       case 'modified':
@@ -432,11 +418,14 @@ const RetailerOrders = () => {
     switch (status) {
       case 'pending':
         return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'confirmed':
+      case 'processing':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'dispatched':
         return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-      case 'shipped':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'out_for_delivery':
+        return 'bg-violet-100 text-violet-800 border-violet-200';
       case 'delivered':
+      case 'completed':
         return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -453,12 +442,13 @@ const RetailerOrders = () => {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all duration-200 p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-slate-900">{order.distributor?.name || order.distributorId}</h3>
+          <h3 className="font-semibold text-slate-900">{order.distributor?.companyName || order.distributorId}</h3>
           <p className="text-xs text-slate-500">{order.orderNumber}</p>
         </div>
         <div className="flex items-center space-x-2">
           <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(order.status)}`}>
-            <span className="capitalize">{order.status}</span>
+            {getStatusIcon(order.status)}
+            <span className="capitalize">{prettyStatus(order.status)}</span>
           </div>
         </div>
       </div>
@@ -487,14 +477,15 @@ const RetailerOrders = () => {
           <span>View</span>
         </button>
         <div className="flex space-x-2">
-          {order.status === 'processing' && (
-            <button
-              onClick={() => handleCompleteOrder(order.id)}
-              className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4" />
-              <span>Complete</span>
-            </button>
+          {['dispatched', 'out_for_delivery'].includes(order.status) && (
+            <span className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 rounded-lg">
+              <Truck className="w-4 h-4" />
+              <span>
+                {order.delivery?.agentName
+                  ? `${order.delivery.agentName} · give your code on arrival`
+                  : 'Awaiting a delivery agent'}
+              </span>
+            </span>
           )}
           {order.status === 'pending' && (
             <button
@@ -634,17 +625,6 @@ const RetailerOrders = () => {
             <h1 className="text-2xl font-bold text-slate-900">Order Management</h1>
             <div className="flex items-center space-x-4">
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <Bell className="w-5 h-5" />
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center border-2 border-white">
-                    {notifications.filter(n => !n.read).length}
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => setShowCreateOrder(true)}
                 className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
               >
@@ -661,7 +641,7 @@ const RetailerOrders = () => {
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex space-x-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm overflow-x-auto">
-              {['all', 'pending', 'processing', 'modified', 'completed'].map(tab => (
+              {['all', 'pending', 'processing', 'dispatched', 'out_for_delivery', 'delivered', 'modified', 'cancelled'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -670,7 +650,7 @@ const RetailerOrders = () => {
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  <span className="capitalize">{prettyStatus(tab)}</span>
                 </button>
               ))}
             </div>
@@ -710,35 +690,6 @@ const RetailerOrders = () => {
       {/* Modals */}
       {showCreateOrder && <CreateOrderModal />}
       {showOrderDetails && selectedOrder && <OrderDetailsModal order={selectedOrder} />}
-      {showNotifications && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-slate-900">Notifications</h2>
-                <button
-                  onClick={() => setShowNotifications(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <XCircle className="w-5 h-5 text-slate-500" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 space-y-4">
-              {notifications.map((notification, index) => (
-                <div key={index} className={`p-4 rounded-lg border ${notification.read ? 'bg-slate-50 border-slate-200' : 'bg-indigo-50 border-indigo-100'}`}>
-                  <h3 className="font-semibold text-slate-900">{notification.title}</h3>
-                  <p className="text-sm text-slate-600 mt-1">{notification.message}</p>
-                  <span className="text-xs text-slate-500 mt-2 block">{new Date(notification.date).toLocaleString()}</span>
-                </div>
-              ))}
-              {notifications.length === 0 && (
-                <p className="text-center text-slate-500 py-4">No new notifications</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {editMode && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
