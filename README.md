@@ -1,201 +1,116 @@
-#  Sledje – Smart Retail & Distribution Management Platform
+# Sledje
 
-**Sledje** is a full-stack platform that connects **retailers** and **distributors** in a single ecosystem.
-It helps manage **inventory, orders, payments, and relationships** — all in one place.
-Sledje aims to make supply chain management for small and medium retailers **faster, transparent, and fully digital**.
+**Smart retail and distribution management for small shops and their suppliers.**
 
----
+Sledje connects **retailers** (kirana shops, small retail) with their **distributors** in one
+system: discover and connect to suppliers, browse a shared catalogue, order stock, and carry a
+running credit balance that is paid down over time.
 
-## Overview
+Its distinguishing design decision is **product-based billing** — credit is tracked as a
+running account per *product*, not per order or per invoice. See
+[docs/02-product-billing.md](docs/02-product-billing.md).
 
-Sledje consists of:
+> **Status: pre-production.** A significant share of the codebase does not currently execute.
+> Before trusting any flow, read [docs/10-known-issues.md](docs/10-known-issues.md).
 
-*  **Retailer Panel** – for managing shop inventory, placing orders, tracking payments, and maintaining relationships.
-*  **Distributor Panel** – for managing product catalogs, processing retailer orders, analyzing sales, and tracking payments.
-*  **Landing Page** – a unified entry point for both retailers and distributors to sign up, log in, and learn about the platform.
+## Stack
 
----
+| Layer | Technology |
+|---|---|
+| Frontend | React 19 (Create React App), React Router 7, Tailwind 3, axios |
+| Backend | Node.js (ESM), Express 5 |
+| Database | PostgreSQL + Drizzle ORM |
+| Messaging | NATS JetStream (transactional outbox + consumers) |
+| Realtime | Socket.IO |
+| Auth | JWT + bcrypt |
 
-##  Core Features
-
-###  **Retailer Dashboard**
-
-| Section               | Description                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------- |
-| **Shelf (Inventory)** | View, manage, and update all available products in the shop.                           |
-| **Cart & Order Page** | Add items to cart, place new orders, and manage existing ones (track status).          |
-| **Payments Page**     | Manage **daily or weekly** payments to distributors, based on sales of their products. |
-| **You Page**          | Update shop profile, manage connected distributors, and view relationship info.        |
-
----
-
-###  **Distributor Dashboard**
-
-| Section           | Description                                                                     |
-| ----------------- | ------------------------------------------------------------------------------- |
-| **Orders Page**   | View incoming retailer orders; **accept, reject, or modify** them in real time. |
-| **Products Page** | Add, edit, or remove products distributed to connected retailers.               |
-| **Overview Page** | Analyze overall product sales, performance, and demand trends.                  |
-| **Payments Page** | Track retailer payments, send **payment reminders** or mark defaults.           |
-| **You Page**      | Update distributor profile and connect with new retailers.                      |
-
----
-
-###  **Landing Page**
-
-* Welcomes new and existing users
-* Provides login and signup portals for both retailers and distributors
-* Highlights Sledje’s features and benefits
-
----
-
-##  Tech Stack
-
-| Layer                 | Technology                                            |
-| --------------------- | ----------------------------------------------------- |
-| **Frontend (Web)**    | React.js + Tailwind CSS                               |
-| **Backend**           | Node.js + Express.js                                  |
-| **Database**          | PostgreSQL                                            |
-| **Mobile (optional)** | Flutter (for portable version of retailer dashboard)  |
-| **Auth**              | JWT (JSON Web Token)                                  |
-| **Payments**          | Integrated via gateway API (e.g., Razorpay or Stripe) |
-
----
-
-## ⚙️ Setup & Installation
-
-### 1️⃣ Clone the Repository
+## Quickstart
 
 ```bash
-git clone https://github.com/your-username/sledje.git
-cd sledje
-```
-
-### 2️⃣ Backend Setup
-
-```bash
+# 1. Infrastructure (Postgres on host port 5433, NATS, pgAdmin)
 cd backend
+docker compose up -d
+
+# 2. Backend
+cp .env.example .env        # fill in JWT_SECRET and POSTGRES_URL
 npm install
-cp .env.example .env
-# Fill in database and secret details
-npm start
-```
+npm run migrate
+npm run dev                 # http://localhost:5000
 
-### 3️⃣ Frontend Setup
+# 3. Seed catalogue data (optional)
+node scripts/seed_test_data.js
 
-```bash
-cd frontend
+# 4. Frontend — NOTE: edit src/api.js to point at localhost first
+cd ../frontend
 npm install
-npm start
+npm start                   # http://localhost:3000
 ```
 
+Full setup, environment variables and the operational runbook:
+[docs/09-operations.md](docs/09-operations.md).
 
----
+## Documentation
 
-## Environment Variables
+Start at [docs/README.md](docs/README.md).
 
-Create a `.env` file inside the **backend** folder with the following:
+| Document | What it covers |
+|---|---|
+| [01-overview.md](docs/01-overview.md) | Product, actors, glossary, subsystem status |
+| [02-product-billing.md](docs/02-product-billing.md) | **The core design decision.** Read this early. |
+| [03-architecture.md](docs/03-architecture.md) | Boot sequence, layering, middleware, module inventory |
+| [04-data-model.md](docs/04-data-model.md) | All 26 tables, constraints, migrations |
+| [05-api-reference.md](docs/05-api-reference.md) | Every HTTP endpoint |
+| [06-events.md](docs/06-events.md) | NATS subjects, outbox, consumers, realtime |
+| [07-domain-flows.md](docs/07-domain-flows.md) | End-to-end lifecycles |
+| [08-frontend.md](docs/08-frontend.md) | Routes, auth, which screens are real vs mock |
+| [09-operations.md](docs/09-operations.md) | Setup, env vars, workers, deployment |
+| [10-known-issues.md](docs/10-known-issues.md) | Defect register — **read before debugging** |
+| [11-design-critique.md](docs/11-design-critique.md) | Argued critique of the current design |
+| [12-target-model.md](docs/12-target-model.md) | Proposed target model, including the POS |
+| [13-migration-path.md](docs/13-migration-path.md) | Staged path from here to there |
+| [14-simplification.md](docs/14-simplification.md) | What to eliminate (NATS, consumers) and what to keep |
+| [15-delivery-confirmation.md](docs/15-delivery-confirmation.md) | Delivery agents and the retailer-held code |
+| [16-offline-first.md](docs/16-offline-first.md) | Offline-first design for the shop counter |
+
+## Repository layout
 
 ```
-PORT=5000
-POSTGRES_URL=postgresql://username:password@localhost:5432/sledje
-JWT_SECRET=your_secret_key
-PAYMENT_GATEWAY_KEY=your_payment_key
+backend/
+  src/
+    app.js                  Express app + route mounts
+    server.js               Boot: NATS -> HTTP -> Socket.IO -> consumers
+    api-gateway/            routes/, controllers/, middlewares/
+    modules/<domain>/       service + repository + events per domain
+    consumers/              NATS JetStream consumers
+    workers/                Out-of-process jobs (settlement)
+    realtime/               Socket.IO server
+    db/schema.js            Drizzle schema (the authoritative data model)
+    config/                 postgres, nats, nats-streams
+  drizzle/                  Generated migrations
+  scripts/                  Seed scripts
+frontend/
+  src/
+    App.js                  Route table
+    api.js                  axios instance
+    components/             Shared UI + AuthContext
+    pages/                  Landing/, Retailers/, Distributors/
+docs/                       This documentation
 ```
 
----
+## Contributing
 
-## 📂 Folder Structure
+There is currently no CI, no linter for the backend, and no working test suite — see
+[docs/09-operations.md](docs/09-operations.md). Until that changes, verify changes by running
+the affected flow end to end.
 
-```
-Sledje/
-│
-├── backend/            # Node.js + Express API
-│   ├── routes/
-│   ├── controllers/
-│   ├── models/
-│   ├── middleware/
-│   └── utils/
-│
-├── frontend/           # React app for retailer + distributor dashboards
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   │   ├── Retailer/
-│   │   │   ├── Distributor/
-│   │   │   └── Landing/
-│   │   └── utils/
-│   └── public/
-│
-├── mobile/             # Flutter app (optional)
-│   ├── lib/
-│   └── assets/
-│
-└── README.md
-```
+When adding code, follow the layering convention documented in
+[docs/03-architecture.md](docs/03-architecture.md): route → controller → service → repository.
+Several existing modules do not; do not use them as a template.
 
----
+## Author
 
-##  Example API Endpoints
+Gunjan Kumar
 
-| Method | Endpoint                     | Description                      |
-| ------ | ---------------------------- | -------------------------------- |
-| GET    | `/api/retailers/products`    | Fetch all available products     |
-| POST   | `/api/orders/new`            | Place a new retailer order       |
-| PUT    | `/api/orders/:id`            | Update order status              |
-| GET    | `/api/payments`              | Get payment history              |
-| POST   | `/api/distributors/products` | Add or edit distributor products |
+## License
 
----
-
-##  Key Workflows
-
-**Retailer → Distributor**
-
-1. Retailer browses product shelf
-2. Adds items to cart and places order
-3. Distributor receives and accepts/rejects
-4. Payment tracked based on sale
-5. Distributor sends reminders if overdue
-
----
-
-## 💡 Future Enhancements
-
-*  Advanced analytics dashboard
-*  Smart restocking suggestions
-*  In-app notifications for payment reminders
-*  Chat between retailers and distributors
-*  Complete Flutter app for both roles
-
----
-
-##  Contributing
-
-Contributions are welcome!
-
-1. Fork the repository
-2. Create a new branch:
-
-   ```bash
-   git checkout -b feature-name
-   ```
-3. Commit changes and push
-4. Create a Pull Request 
-
----
-
-##  Author
-
-**Gunjan Kumar**
-[[gunjan23ths@gmail.com](mailto:gunjan23ths@gmail.com)]
- [LinkedIn or Portfolio link]
-
----
-
-##  License
-
-This project is licensed under the **MIT License**.
-
----
-
+MIT
