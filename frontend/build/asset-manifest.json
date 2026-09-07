@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "/static/css/main.8f1838a5.css",
-    "main.js": "/static/js/main.f300b723.js",
+    "main.css": "/static/css/main.25cb7323.css",
+    "main.js": "/static/js/main.d5a22ce5.js",
     "static/media/HomeEarth.png": "/static/media/HomeEarth.8462955aa215f0fa44f1.png",
     "static/media/N.png": "/static/media/N.172d46267cb1436b30ed.png",
     "static/media/HomeMoney.png": "/static/media/HomeMoney.a88f4277a832151e2bc8.png",
@@ -18,11 +18,11 @@
     "static/media/G.jpeg": "/static/media/G.61f302d68028cb4bef67.jpeg",
     "static/media/404.jpg": "/static/media/404.0d9ae452f41a48f1d0f0.jpg",
     "index.html": "/index.html",
-    "main.8f1838a5.css.map": "/static/css/main.8f1838a5.css.map",
-    "main.f300b723.js.map": "/static/js/main.f300b723.js.map"
+    "main.25cb7323.css.map": "/static/css/main.25cb7323.css.map",
+    "main.d5a22ce5.js.map": "/static/js/main.d5a22ce5.js.map"
   },
   "entrypoints": [
-    "static/css/main.8f1838a5.css",
-    "static/js/main.f300b723.js"
+    "static/css/main.25cb7323.css",
+    "static/js/main.d5a22ce5.js"
   ]
 }

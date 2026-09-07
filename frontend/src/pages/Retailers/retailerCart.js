@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Minus,
@@ -22,15 +23,108 @@ import {
 import API from "../../api";
 
 export default function RetailerCart({
-  showCart,
+  // These props come from retailerShelf.js when this is used as a cart
+  // drawer. When the router mounts this directly at /retailer/cart with no
+  // props (App.js: <Route path="cart" element={<RetailerCart />} />), it
+  // used to crash immediately on cartItems.reduce(). It now runs standalone
+  // instead: showCart defaults open, and cart data is fetched from the API
+  // when the caller didn't already supply it (P0-26).
+  showCart = true,
   setShowCart,
-  cartItems,
+  cartItems: cartItemsProp,
   groupCartByDistributor,
-  updateCartItemQuantity,
-  removeFromCart,
-  distributorInfo,
+  updateCartItemQuantity: updateCartItemQuantityProp,
+  removeFromCart: removeFromCartProp,
+  distributorInfo: distributorInfoProp,
   onOrderPlaced,
 }) {
+  const navigate = useNavigate();
+  const standalone = cartItemsProp === undefined;
+
+  const [fetchedItems, setFetchedItems] = useState([]);
+  const [fetchedDistributorInfo, setFetchedDistributorInfo] = useState({});
+  const [cartLoading, setCartLoading] = useState(standalone);
+
+  useEffect(() => {
+    if (!standalone) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get("/cart/");
+        if (cancelled) return;
+        const rows = res.data || [];
+        setFetchedItems(
+          rows.map((r) => ({
+            id: r.id,
+            variantId: r.variantId,
+            distributorId: r.distributorId,
+            quantity: r.quantity,
+            unit: r.unit,
+            price: Number(r.price || 0),
+            totalPrice: r.totalPrice ?? Number(r.price || 0) * Number(r.quantity || 0),
+            sku: r.sku,
+            variantName: r.variantName,
+            productName: r.productName,
+            productIcon: r.productIcon,
+          }))
+        );
+        const info = {};
+        for (const r of rows) {
+          if (r.distributorId && !info[r.distributorId]) {
+            info[r.distributorId] = {
+              ownerName: r.distributorOwnerName,
+              companyName: r.distributorCompanyName,
+              phone: r.distributorPhone,
+            };
+          }
+        }
+        setFetchedDistributorInfo(info);
+      } catch (e) {
+        console.error("Failed to load cart", e);
+      } finally {
+        if (!cancelled) setCartLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [standalone]);
+
+  const cartItems = standalone ? fetchedItems : cartItemsProp || [];
+  const distributorInfo = standalone ? fetchedDistributorInfo : distributorInfoProp || {};
+
+  const updateCartItemQuantity =
+    updateCartItemQuantityProp ||
+    (async (itemId, quantity) => {
+      const item = cartItems.find((i) => i.id === itemId);
+      if (!item) return;
+      setFetchedItems((prev) =>
+        prev.map((i) => (i.id === itemId ? { ...i, quantity, totalPrice: i.price * quantity } : i))
+      );
+      try {
+        await API.put("/cart/update", { variantId: item.variantId, quantity });
+      } catch (e) {
+        console.error("Failed to update cart item", e);
+      }
+    });
+
+  const removeFromCart =
+    removeFromCartProp ||
+    (async (itemId) => {
+      const item = cartItems.find((i) => i.id === itemId);
+      if (!item) return;
+      try {
+        await API.delete(`/cart/${item.variantId}`);
+        setFetchedItems((prev) => prev.filter((i) => i.id !== itemId));
+      } catch (e) {
+        console.error("Failed to remove cart item", e);
+      }
+    });
+
+  const closeCart =
+    setShowCart ||
+    (() => navigate("/retailer/shelf"));
+
   const [selectedDistributors, setSelectedDistributors] = useState({});
   const [loading, setLoading] = useState(false);
   const [expandedDistributors, setExpandedDistributors] = useState({});
@@ -95,7 +189,7 @@ export default function RetailerCart({
           expectedDelivery: deliveryDates[distributorId]
         });
       }
-      setShowCart(false);
+      closeCart(false);
       if (onOrderPlaced) {
         const selectedDistributorIds = Object.entries(selectedDistributors)
           .filter(([_, selected]) => selected)
@@ -172,6 +266,14 @@ export default function RetailerCart({
 
   if (!showCart) return null;
 
+  if (cartLoading) {
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-10 text-slate-500">Loading cart...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
@@ -188,7 +290,7 @@ export default function RetailerCart({
               </p>
             </div>
             <button
-              onClick={() => setShowCart(false)}
+              onClick={() => closeCart(false)}
               className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
             >
               <X className="w-6 h-6" />
@@ -510,7 +612,7 @@ export default function RetailerCart({
               {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowCart(false)}
+                  onClick={() => closeCart(false)}
                   className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
                 >
                   Continue Shopping

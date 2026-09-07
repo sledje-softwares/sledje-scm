@@ -16,9 +16,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = (data) => {
-    setUser(data.user);
+    // Login.js calls this as login({ user: response.data }), where
+    // response.data is the raw backend login response:
+    // { token, user: { id, email, role, retailer|distributor } }.
+    // Storing that whole object as "user" double-nests the profile
+    // (user.user.role instead of user.role), which is why nothing in the
+    // app could previously read the logged-in role - PrivateRoute included
+    // (P1-7). Flatten it here once, at the source.
+    const profile = data.user?.user ?? data.user;
+    setUser(profile);
     localStorage.setItem("token", data.user.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("user", JSON.stringify(profile));
     setIsAuthenticated(true);
     localStorage.setItem("isAuthenticated", "true"); // Persist login state
   };

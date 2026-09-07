@@ -1,8 +1,13 @@
+import { Navigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import Login from "./Login";
 
-const PrivateRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+// `allowedRole` restricts a route tree to one account type
+// ("retailer" | "distributor"). Without it, a logged-in retailer could open
+// the entire /distributor/* UI (and vice versa) - the auth gate only ever
+// checked whether *someone* was logged in (P1-7).
+const PrivateRoute = ({ children, allowedRole }) => {
+  const { isAuthenticated, user } = useAuth();
 
   if (!isAuthenticated) {
     return (
@@ -26,6 +31,12 @@ const PrivateRoute = ({ children }) => {
         </main>
       </div>
     );
+  }
+
+  if (allowedRole && user?.role && user.role !== allowedRole) {
+    // Authenticated, but as the wrong account type - send them to their own
+    // dashboard rather than rendering a UI meant for the other role.
+    return <Navigate to={`/${user.role}`} replace />;
   }
 
   return children;

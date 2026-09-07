@@ -69,7 +69,7 @@ function App() {
         <Route
           path="/retailer"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRole="retailer">
                <RetailerLayout/>
             </PrivateRoute>
              
@@ -86,7 +86,7 @@ function App() {
           <Route path="you" element={<RetailerYou />} />
         </Route>
 
-        <Route path="/distributor" element={<PrivateRoute><DistributorLayout /></PrivateRoute>}>
+        <Route path="/distributor" element={<PrivateRoute allowedRole="distributor"><DistributorLayout /></PrivateRoute>}>
         <Route index element={<Navigate to="orders" replace />} />
          <Route path="products" element={<DistributorProducts />} />
          <Route path="orders" element={<DistributorOrders />} />

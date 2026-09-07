@@ -96,23 +96,27 @@ const RetailerOrders = () => {
     setLoading(false);
   };
 
-  // Complete order (distributor enters code, retailer confirms)
+  // Complete order: the retailer confirms delivery with the code that was
+  // issued to them when they placed the order (docs/15-delivery-confirmation.md).
+  // The code is the retailer's, not the distributor's - they hand it to the
+  // delivery agent at the door.
   const handleCompleteOrder = async (orderId) => {
-    const code = prompt("Enter the 6-digit code provided by the distributor to complete the order:");
+    const code = prompt("Enter your 6-digit delivery code for this order:");
     if (!code || code.length !== 6) {
       alert("Invalid code.");
       return;
     }
     setLoading(true);
     try {
-      // Backend should verify code and mark order as completed
+      // The backend verifies the code and, in the same transaction, updates
+      // stock, the product bill and the ledger. Do NOT also call
+      // /inventory/checkout here - that would add the delivered quantity to
+      // the shelf a second time.
       await API.put(`/orders/retailer/orders/${orderId}/complete`, { code });
-      // Update inventory after order is fulfilled
-      await API.post('/inventory/checkout', { orderId });
       fetchOrders();
       alert("Order completed and inventory updated!");
     } catch (e) {
-      alert(e.response?.data?.message || "Failed to complete order");
+      alert(e.response?.data?.error || e.response?.data?.message || "Failed to complete order");
     }
     setLoading(false);
   };
