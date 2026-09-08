@@ -127,39 +127,100 @@ export default function Shelf() {
   }, [placeholderIndex]);
 
 
-  // --- FETCH PRODUCTS FROM BACKEND AND BUILD CATEGORY STRUCTURE ---
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setIsLoading(true);
-      try {
-        // Fetch products from connected distributors
-        const response = await API.get('/products/connected-distributors');
-        const products = response.data.products || [];
-        setProductData(products);
-
-        // Build category structure dynamically
-        const structure = {};
-        products.forEach(product => {
-          const category = product.category || "Other";
-          const subcategory = product.subcategory || "General";
-          if (!structure[category]) structure[category] = {};
-          if (!structure[category][subcategory]) structure[category][subcategory] = [];
-          structure[category][subcategory].push(product.name);
+  // --- FETCH THE CATALOGUE A RETAILER CAN ORDER FROM ---
+  //
+  // GET /products/connected-distributors returns a FLAT list: one row per
+  // (distributor, variant). The UI needs it grouped into products, each with a
+  // `variants` array and a single distributor. One card per (product,
+  // distributor) pair, so the same catalogue item stocked by two distributors
+  // stays orderable from each.
+  const groupSellableItems = (rows, distributorNames = {}) => {
+    const byCard = new Map();
+    (rows || []).forEach((r) => {
+      const productId = r.productId ?? r.product_id;
+      const distributorId = r.distributorId ?? r.distributor_id;
+      if (!productId || !distributorId) return;
+      const cardId = `${productId}__${distributorId}`;
+      if (!byCard.has(cardId)) {
+        byCard.set(cardId, {
+          id: cardId,
+          productId,
+          name: r.productName || r.name || "Unnamed product",
+          category: r.category || "Other",
+          subcategory: r.subcategory || "General",
+          imageUrl: r.imageUrl || r.image_url || null,
+          distributorId,
+          distributor:
+            distributorNames[distributorId] ||
+            r.distributorName ||
+            r.distributorCompanyName ||
+            "Distributor",
+          variants: [],
         });
-        setCategoryStructure(structure);
-
-        // Set default active category and subcategory
-        const firstCategory = Object.keys(structure)[0] || null;
-        setActiveCategory(firstCategory);
-        setActivesubcategory(firstCategory ? Object.keys(structure[firstCategory])[0] : null);
-
-      } catch (error) {
-        setProductData([]);
-        setCategoryStructure({});
       }
-      setIsLoading(false);
-    };
-    fetchProducts();
+      byCard.get(cardId).variants.push({
+        id: r.variantId ?? r.variant_id,
+        name: r.variantName || r.name || "Default",
+        sku: r.sku || "",
+        unit: r.unit || "",
+        mrp: Number(r.mrp) || 0,
+        stock: Number(r.stock) || 0,
+        sellingPrice: Number(r.sellingPrice ?? r.selling_price ?? r.price) || 0,
+      });
+    });
+    return Array.from(byCard.values());
+  };
+
+  const applyCatalogue = (grouped) => {
+    setProductData(grouped);
+    setInventoryArr(grouped);
+
+    const structure = {};
+    grouped.forEach((product) => {
+      const category = product.category || "Other";
+      const subcategory = product.subcategory || "General";
+      if (!structure[category]) structure[category] = {};
+      if (!structure[category][subcategory]) structure[category][subcategory] = [];
+      if (!structure[category][subcategory].includes(product.name)) {
+        structure[category][subcategory].push(product.name);
+      }
+    });
+    setCategoryStructure(structure);
+
+    setActiveCategory((prev) =>
+      prev && structure[prev] ? prev : Object.keys(structure)[0] || null
+    );
+  };
+
+  const loadCatalogue = async () => {
+    setIsLoading(true);
+    try {
+      // Distributor names are cosmetic - the sellable-items rows only carry ids.
+      const names = {};
+      try {
+        const dRes = await API.get("/connections/retailer/distributors");
+        (dRes.data?.distributors || []).forEach((d) => {
+          names[d.id || d._id] = d.companyName || d.company_name || d.name;
+        });
+      } catch {
+        /* fall back to "Distributor" */
+      }
+
+      const response = await API.get("/products/connected-distributors");
+      const rows = Array.isArray(response.data)
+        ? response.data
+        : response.data?.products || response.data?.items || [];
+      applyCatalogue(groupSellableItems(rows, names));
+    } catch (error) {
+      setProductData([]);
+      setInventoryArr([]);
+      setCategoryStructure({});
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    loadCatalogue();
     // eslint-disable-next-line
   }, []);
 
@@ -167,7 +228,7 @@ export default function Shelf() {
   useEffect(() => {
     const initialQuantities = {};
     productData.forEach(product => {
-      product.variants.forEach(variant => {
+      (product.variants || []).forEach(variant => {
         initialQuantities[`${product.id}-${variant.id}`] = {
           quantity: 0,
           unit: "box"
@@ -191,12 +252,11 @@ export default function Shelf() {
 
           // Find product in inventoryArr or productData
           const product =
-            productData.find(p => String(p.id) === String(item.productId))
+            productData.find(p => String(p.productId) === String(item.productId));
           if (!product) return item;
-          console.log("Found product:", product);
           // Find variant by id or _id
           const variant =
-            product.variants.find(
+            (product.variants || []).find(
               v => String(v.id) === String(item.variantId) || String(v._id) === String(item.variantId)
             );
           if (!variant) return item;
@@ -228,11 +288,19 @@ export default function Shelf() {
     // eslint-disable-next-line
   }, [inventoryArr, productData]);
 
-  useEffect(() => {
-    if (productsLoaded) {
-      API.post('/cart/save', { cartItems });
-    }
-  }, [cartItems, productsLoaded]);
+  // Persist newly added lines to the server cart. There is no bulk "save" endpoint;
+  // POST /cart/add upserts one (variant) line at a time.
+  const persistCartLines = (lines) => {
+    lines.forEach((line) => {
+      API.post('/cart/add', {
+        variantId: line.variantId,
+        distributorId: line.distributorId,
+        quantity: line.quantity,
+        unit: line.unit,
+        price: line.price,
+      }).catch((e) => console.warn('cart/add failed:', e?.message));
+    });
+  };
 
   // --- UTILITY FUNCTIONS ---
   const updateUnit = (productId, variantId, unit) => {
@@ -247,13 +315,13 @@ export default function Shelf() {
   };
 
   const addToCart = (product) => {
-    const newItems = product.variants.map(variant => {
+    const newItems = (product.variants || []).map(variant => {
       const key = `${product.id}-${variant.id}`;
       const quantity = orderQuantities[key]?.quantity || 0;
       if (quantity > 0) {
         return {
           id: key,
-          productId: product.id,
+          productId: product.productId,
           variantId: variant.id,
           productName: product.name,
           productIcon: product.icon,
@@ -275,6 +343,8 @@ export default function Shelf() {
       alert("Please select quantity for at least one variant");
       return;
     }
+
+    persistCartLines(newItems);
 
     setCartItems(prevCart => {
       const updatedCart = [...prevCart];
@@ -302,7 +372,7 @@ export default function Shelf() {
 
     // Reset input quantities
     const resetQuantities = {};
-    product.variants.forEach(variant => {
+    (product.variants || []).forEach(variant => {
       const key = `${product.id}-${variant.id}`;
       resetQuantities[key] = {
         ...orderQuantities[key],
@@ -335,7 +405,7 @@ export default function Shelf() {
     const itemsToAdd = [];
 
     currentProducts.forEach(product => {
-      product.variants.forEach(variant => {
+      (product.variants || []).forEach(variant => {
         const key = `${product.id}-${variant.id}`;
         const quantity = orderQuantities[key]?.quantity || 0;
         if (quantity > 0) {
@@ -343,7 +413,7 @@ export default function Shelf() {
             id: key,
             distributorId: product.distributorId,
             sku: variant.sku || "",
-            productId: product.id,
+            productId: product.productId,
             variantId: variant.id,
             productName: product.name,
             productIcon: product.icon,
@@ -363,6 +433,8 @@ export default function Shelf() {
       alert("Please select quantity for at least one item");
       return;
     }
+
+    persistCartLines(itemsToAdd);
 
     setCartItems(prevCart => {
       const updatedCart = [...prevCart];
@@ -451,13 +523,15 @@ export default function Shelf() {
     const results = [];
     const queryLower = query.toLowerCase();
     productData.forEach(product => {
-      if (product.name.toLowerCase().includes(queryLower)) {
+      const name = (product.name || "").toLowerCase();
+      const distributor = (product.distributor || "").toLowerCase();
+      if (name.includes(queryLower)) {
         results.push({ ...product, matchType: 'product' });
-      } else if (product.distributor.toLowerCase().includes(queryLower)) {
+      } else if (distributor.includes(queryLower)) {
         results.push({ ...product, matchType: 'distributor' });
       } else {
-        const matchingVariants = product.variants.filter(variant =>
-          variant.name.toLowerCase().includes(queryLower)
+        const matchingVariants = (product.variants || []).filter(variant =>
+          (variant.name || "").toLowerCase().includes(queryLower)
         );
         if (matchingVariants.length > 0) {
           results.push({ ...product, matchType: 'variant', matchingVariants });
@@ -573,26 +647,29 @@ export default function Shelf() {
     }
     // Apply filters
     return products.filter(product => {
+      const variants = product.variants || [];
       if (filterType === "low-stock") {
-        return product.variants.some(v => v.stock > 0 && v.stock <= 5);
+        return variants.some(v => v.stock > 0 && v.stock <= 5);
       } else if (filterType === "out-of-stock") {
-        return product.variants.some(v => v.stock === 0);
+        return variants.some(v => v.stock === 0);
       }
       return true;
     }).sort((a, b) => {
       let aVal, bVal;
+      const aVars = a.variants || [];
+      const bVars = b.variants || [];
       switch (sortBy) {
         case 'stock':
-          aVal = a.variants.reduce((sum, v) => sum + v.stock, 0);
-          bVal = b.variants.reduce((sum, v) => sum + v.stock, 0);
+          aVal = aVars.reduce((sum, v) => sum + v.stock, 0);
+          bVal = bVars.reduce((sum, v) => sum + v.stock, 0);
           break;
         case 'price':
-          aVal = Math.min(...a.variants.map(v => v.sellingPrice));
-          bVal = Math.min(...b.variants.map(v => v.sellingPrice));
+          aVal = aVars.length ? Math.min(...aVars.map(v => v.sellingPrice)) : 0;
+          bVal = bVars.length ? Math.min(...bVars.map(v => v.sellingPrice)) : 0;
           break;
         default:
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
+          aVal = (a.name || "").toLowerCase();
+          bVal = (b.name || "").toLowerCase();
       }
       if (sortOrder === 'desc') {
         return aVal < bVal ? 1 : -1;
@@ -664,80 +741,17 @@ export default function Shelf() {
     );
   };
 
-  // Fetch inventory variant IDs for quick lookup
-  const fetchInventoryVariantIds = async () => {
-    try {
-      const res = await API.get('/inventory');
-      const arr = Array.isArray(res.data) ? res.data : (res.data.inventory || []);
-      setInventoryArr(arr);
-      setProductData(arr);
-
-      // Build category structure from inventoryArr
-      const structure = {};
-      arr.forEach(product => {
-        const category = product.category || "Other";
-        const subcategory = product.subcategory || "General";
-        if (!structure[category]) structure[category] = {};
-        if (!structure[category][subcategory]) structure[category][subcategory] = [];
-        structure[category][subcategory].push(product.name);
-      });
-      setCategoryStructure(structure);
-
-      // Set default active category and subcategory if not set
-      const firstCategory = Object.keys(structure)[0] || null;
-      setActiveCategory(firstCategory);
-      setActivesubcategory(firstCategory ? Object.keys(structure[firstCategory])[0] : null);
-
-      // Build stock map
-      const stockMap = {};
-      arr.forEach(item => {
-        item.variants.forEach(variant => {
-          stockMap[variant._id] = variant.stock || 0;
-        });
-      });
-      setInventoryStockMap(stockMap);
-    } catch {
-      setInventoryArr([]);
-      setCategoryStructure({});
-      setInventoryStockMap({});
-    }
-  };
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchInventoryVariantIds();
-  }, []);
-
   const handleAddVariantToInventory = async (variantId) => {
     setIsAddingToInventory(true);
     try {
       await API.post("/inventory/add", { variantId });
-      await fetchInventoryVariantIds(); // <-- ensure this is awaited
+      await loadCatalogue();
       alert("Variant added to your inventory!");
     } catch {
       alert("Failed to add variant to inventory.");
     }
     setIsAddingToInventory(false);
   };
-
-  // Distributor information state
-  const [distributorInfo, setDistributorInfo] = useState({}); // { distributorId: { companyName, ... } }
-
-  useEffect(() => {
-    if (productData.length === 0) return;
-    const uniqueIds = [...new Set(productData.map(p => p.distributorId).filter(Boolean))];
-    if (uniqueIds.length === 0) return;
-
-    API.post('/distributors/batch', { ids: uniqueIds })
-      .then(res => {
-        const infoMap = {};
-        (res.data.distributors || []).forEach(d => {
-          infoMap[d._id] = d;
-        });
-        setDistributorInfo(infoMap);
-      })
-      .catch(() => setDistributorInfo({}));
-  }, [productData]);
 
   // New function to group cart items by distributor
   const groupCartByDistributor = () => {
@@ -1033,12 +1047,12 @@ export default function Shelf() {
                         className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                       />
                       <div className="absolute top-2 right-2 flex flex-col gap-2">
-                        {product.variants.some(v => v.stock <= 5 && v.stock > 0) && (
+                        {(product.variants || []).some(v => v.stock <= 5 && v.stock > 0) && (
                           <span className="bg-amber-100 text-amber-800 text-xs font-medium px-2 py-1 rounded-full shadow-sm border border-amber-200">
                             Low Stock
                           </span>
                         )}
-                        {product.variants.every(v => v.stock === 0) && (
+                        {(product.variants || []).length > 0 && product.variants.every(v => v.stock === 0) && (
                           <span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded-full shadow-sm border border-red-200">
                             Out of Stock
                           </span>
@@ -1060,7 +1074,7 @@ export default function Shelf() {
 
                       {/* Variants */}
                       <div className="space-y-3 mt-auto">
-                        {product.variants.map((variant) => {
+                        {(product.variants || []).map((variant) => {
                           const key = `${product.id}-${variant.id}`;
                           const quantity = orderQuantities[key]?.quantity || 0;
                           const stockStatus = getStockStatus([variant]);
@@ -1110,7 +1124,7 @@ export default function Shelf() {
 
                       <button
                         onClick={() => addToCart(product)}
-                        disabled={!product.variants.some(v => (orderQuantities[`${product.id}-${v.id}`]?.quantity || 0) > 0)}
+                        disabled={!(product.variants || []).some(v => (orderQuantities[`${product.id}-${v.id}`]?.quantity || 0) > 0)}
                         className="w-full mt-4 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors shadow-sm"
                       >
                         Add to Cart
