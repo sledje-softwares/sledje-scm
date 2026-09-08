@@ -70,8 +70,25 @@ This codebase has **22 `db.transaction` call sites**. Every sale, every
 delivery confirmation and every synced operation runs inside one. A sale that
 half-commits is the worst failure this system can have.
 
-Use the **direct connection** (port 5432) or the **session-mode pooler**, not
-the default transaction pooler. Verify before trusting it:
+Use the **session-mode pooler** — host `*.pooler.supabase.com`, port **5432**,
+username `postgres.<project-ref>`. Not the transaction pooler (port 6543).
+
+**Do not use the direct connection from Render, Fly, or most PaaS hosts.**
+`db.<project-ref>.supabase.co` publishes an AAAA record and *no A record* —
+it is IPv6-only unless you buy Supabase's IPv4 add-on. Hosts without outbound
+IPv6 fail with `connect ENETUNREACH <ipv6-addr>:5432`, which surfaces through
+Drizzle as a generic "Failed query", not as a network error. Verified on this
+project:
+
+```
+$ node -e 'require("dns").promises.resolve("db.kytgboyszoybejaxdsku.supabase.co","A")'
+  -> ENODATA
+$ ... resolve(..., "AAAA")
+  -> 2406:da1a:82a:9d02:f17f:c2da:460e:2d2e
+```
+
+The session pooler is IPv4 and still preserves session state, so it satisfies
+both constraints at once. Verify before trusting it:
 
 ```sql
 -- must return the same pid twice in one session
@@ -112,9 +129,11 @@ Set `CLIENT_ORIGIN` to the Pages URL, or CORS reflects every origin.
 
 ```bash
 # 1. Database — DONE. Supabase project "sledje-scm" (kytgboyszoybejaxdsku),
-#    ap-south-1 (Mumbai). Take the DIRECT connection string (port 5432) from
-#    the dashboard, not the transaction pooler.
-export POSTGRES_URL='postgresql://...:5432/postgres'
+#    ap-south-1 (Mumbai). Take the SESSION POOLER string from the dashboard
+#    (Connect -> "Session pooler"): host *.pooler.supabase.com, port 5432,
+#    user postgres.<project-ref>. NOT the direct connection (IPv6-only, see
+#    above) and NOT the transaction pooler (port 6543, breaks transactions).
+export POSTGRES_URL='postgresql://postgres.<ref>:<pw>@aws-N-ap-south-1.pooler.supabase.com:5432/postgres'
 
 # 2. Schema — DONE, applied via migration API and verified (37 tables, all
 #    load-bearing constraints present). `drizzle.__drizzle_migrations` is
