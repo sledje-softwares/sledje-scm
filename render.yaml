@@ -1,0 +1,48 @@
+# Render Blueprint for the Sledje SCM backend.
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo. Render reads
+# this file and pre-fills the service; env vars marked `sync: false` are left
+# blank for you to fill in by hand (secrets and per-deploy values never belong
+# in a committed file).
+#
+# NATS_URL is deliberately absent — see docs/18-deployment.md and
+# src/server.js's NATS init: it's wrapped in try/catch and only disables
+# Socket.IO fan-out on failure, so this backend runs correctly with no
+# broker at all.
+
+services:
+  - type: web
+    name: sledje-scm-backend
+    runtime: node
+    plan: free
+    region: singapore # closest Render region to the database's ap-south-1 (Mumbai); see docs/18-deployment.md on co-location
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.11.0
+      # Direct connection (port 5432) or session-mode pooler ONLY — NOT the
+      # default transaction-mode pooler. See docs/18-deployment.md: this
+      # codebase has 22 db.transaction() call sites that the transaction
+      # pooler silently breaks.
+      - key: POSTGRES_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: OTP_TTL_MINUTES
+        value: "10"
+      # The deployed Cloudflare frontend URL. Without this, Socket.IO CORS
+      # defaults to "*" (open to any origin).
+      - key: CLIENT_ORIGIN
+        sync: false
+      # 32 bytes of hex, exactly 64 hex characters — utils/deliveryCode.js
+      # throws on anything else. Rotating this after any delivery is in
+      # flight makes that delivery's code permanently unconfirmable.
+      - key: DELIVERY_CODE_KEY
+        sync: false
