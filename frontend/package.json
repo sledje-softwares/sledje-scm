@@ -37,7 +37,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "node e2e/pos.offline.e2e.js"
+    "test:e2e": "node e2e/pos.offline.e2e.js",
+    "e2e": "node e2e/pos.offline.e2e.js"
   },
   "browserslist": {
     "production": [

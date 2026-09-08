@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend — migrations + offline sync suite
+    runs-on: ubuntu-latest
+
+    # A real Postgres, not a mock. Three bugs shipped in this repo passed a
+    # compile check and failed against actual data: a stock double-count, and a
+    # migration that aborted on any database that already held a sale.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: sledje_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+
+    env:
+      POSTGRES_URL: postgresql://postgres:ci@localhost:5432/sledje_ci
+      JWT_SECRET: ci_only_not_a_real_secret
+      JWT_EXPIRES_IN: 7d
+      VERIFY_I_KNOW_THIS_TRUNCATES: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+        working-directory: backend
+
+      - name: Generate a delivery code key
+        run: echo "DELIVERY_CODE_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")" >> $GITHUB_ENV
+
+      - name: Apply every migration in order
+        working-directory: backend
+        run: |
+          for m in drizzle/0*.sql; do
+            echo "-- $m"
+            psql "$POSTGRES_URL" -q -v ON_ERROR_STOP=1 -f "$m"
+          done
+
+      # A migration that only works on an empty database is not a migration.
+      - name: Migrations must survive existing data
+        working-directory: backend
+        run: node scripts/ci_migrate_with_data.js
+
+      - name: Schema must match migrations (no drift)
+        working-directory: backend
+        run: |
+          npx drizzle-kit generate --name ci_drift_check </dev/null
+          if ls drizzle/*ci_drift_check.sql >/dev/null 2>&1; then
+            echo "::error::schema.js has drifted from the migrations:"
+            cat drizzle/*ci_drift_check.sql
+            exit 1
+          fi
+          echo "no drift"
+
+      - name: Backend imports cleanly
+        working-directory: backend
+        run: node -e "import('./src/app.js').then(()=>console.log('ok')).catch(e=>{console.error(e.message);process.exit(1)})"
+
+      # The money model. If these numbers move, something is wrong.
+      - name: Offline sync + two-stage billing suite
+        working-directory: backend
+        run: node scripts/verify_offline_sync.js
+
+  frontend:
+    name: Frontend — build + the bundle actually boots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: npm test
+        working-directory: frontend
+
+      - run: npm run build
+        working-directory: frontend
+
+      # A build that compiles is not a build that runs. The clj-fuzzy bug
+      # compiled perfectly and white-screened every route, because a
+      # Closure-compiled dep read top-level `this` under strict ESM.
+      - name: Install Chrome for the smoke load
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke-load the built bundle in headless Chrome
+        working-directory: frontend
+        run: node ../.github/scripts/smoke-load.mjs
