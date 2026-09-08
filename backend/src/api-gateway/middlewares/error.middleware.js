@@ -38,6 +38,19 @@ function classify(err) {
   if (NATIVE_ERROR_TYPES.some((T) => err instanceof T)) return 500;
 
   const msg = err.message || "";
+
+  // Drizzle wraps every driver-level failure (bad password, host
+  // unreachable, TLS required, the query itself malformed) as a plain Error
+  // whose message is "Failed query: <sql>\nparams: <bound values>". Those
+  // bound values are whatever the caller sent - so a query that failed
+  // because Postgres is unreachable, bound to an email address that happens
+  // to contain "invalid" (any *.invalid address, e.g.), matches BAD_REQUEST
+  // below by accident and gets treated as the caller's fault: a 400 that
+  // leaks the raw SQL and params, and - because only >=500 responses are
+  // console.error'd (below) - never reaches the server logs either. A failed
+  // query is never a malformed request; it is always this service's problem.
+  if (msg.startsWith("Failed query:")) return 500;
+
   if (NOT_FOUND.test(msg)) return 404;
   if (FORBIDDEN.test(msg)) return 403;
   if (BAD_REQUEST.test(msg)) return 400;
