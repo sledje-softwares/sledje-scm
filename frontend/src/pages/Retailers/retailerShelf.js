@@ -12,7 +12,6 @@ import {
   Package,
   TrendingUp,
   AlertTriangle,
-  Loader2,
   PlusCircle,
   X,
   Eye,
@@ -28,6 +27,7 @@ import API from "../../api"; // Adjust the import path as needed
 import { useAuth } from "../../components/AuthContext";
 import RetailerCart from "./retailerCart";
 import { useLocation } from "react-router-dom";
+import { SkeletonCardGrid } from "../../components/Skeleton";
 
 export default function Shelf() {
   // --- STATE ---
@@ -1019,9 +1019,10 @@ export default function Shelf() {
 
             {/* Products Grid */}
             {isLoading ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-              </div>
+              <SkeletonCardGrid
+                count={8}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20"
+              />
             ) : currentProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">

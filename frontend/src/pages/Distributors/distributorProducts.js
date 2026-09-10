@@ -13,6 +13,7 @@ import {
   List
 } from "lucide-react";
 import API from "../../api";
+import { SkeletonCardGrid } from "../../components/Skeleton";
 
 export default function DistributorProducts() {
   // --- STATE ---
@@ -258,9 +259,10 @@ export default function DistributorProducts() {
       {/* --- INVENTORY LIST --- */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
+          <SkeletonCardGrid
+            count={8}
+            className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-4"}
+          />
         )}
 
         {!loading && filteredInventory.length === 0 && (

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../components/AuthContext";
 import API from "../../api";
+import { Skeleton } from "../../components/Skeleton";
 
 // Mock images (replace with your actual imports)
 const GunjanImage = "https://via.placeholder.com/100x100/4F46E5/FFFFFF?text=GS";
@@ -365,23 +366,34 @@ export default function RetailerYou() {
             <div className="w-20 h-20 bg-slate-200 rounded-full overflow-hidden flex-shrink-0 mb-3 sm:mb-0 border-2 border-white shadow-sm">
               <img src={GunjanImage} alt="Owner" className="w-full h-full object-cover" />
             </div>
-            <div className="sm:ml-4 text-center sm:text-left">
-              <h3 className="text-lg font-semibold text-slate-900">
-                {retailerProfile ? retailerProfile.retailers.ownerName : "Loading..."}
-              </h3>
-              <p className="text-sm text-slate-600 font-medium">
-                {retailerProfile ? retailerProfile.retailers.businessName : ""}
-              </p>
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
-                  <span className="w-16 text-slate-400">Email:</span>
-                  {retailerProfile ? retailerProfile.users.email : ""}
-                </p>
-                <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
-                  <span className="w-16 text-slate-400">Phone:</span>
-                  {retailerProfile ? retailerProfile.users.phone : ""}
-                </p>
-              </div>
+            <div className="sm:ml-4 text-center sm:text-left w-full">
+              {retailerProfile ? (
+                <>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    {retailerProfile.retailers.ownerName}
+                  </h3>
+                  <p className="text-sm text-slate-600 font-medium">
+                    {retailerProfile.retailers.businessName}
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
+                      <span className="w-16 text-slate-400">Email:</span>
+                      {retailerProfile.users.email}
+                    </p>
+                    <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start">
+                      <span className="w-16 text-slate-400">Phone:</span>
+                      {retailerProfile.users.phone}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2 flex flex-col items-center sm:items-start">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-48 mt-1" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+              )}
             </div>
           </div>
 
@@ -427,8 +439,14 @@ export default function RetailerYou() {
               {activeTab === 'distributors' && (
                 <div className="space-y-3">
                   {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mx-auto"></div>
+                    <div className="space-y-3">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
+                          <Skeleton className="h-4 w-2/5" />
+                          <Skeleton className="h-3 w-3/5" />
+                          <Skeleton className="h-3 w-1/4" />
+                        </div>
+                      ))}
                     </div>
                   ) : connectedDistributors.length === 0 ? (
                     <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
@@ -462,8 +480,13 @@ export default function RetailerYou() {
               {activeTab === 'requests' && (
                 <div className="space-y-3">
                   {loading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent mx-auto"></div>
+                    <div className="space-y-3">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
+                          <Skeleton className="h-4 w-2/5" />
+                          <Skeleton className="h-3 w-3/5" />
+                        </div>
+                      ))}
                     </div>
                   ) : connectionRequests.length === 0 ? (
                     <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">

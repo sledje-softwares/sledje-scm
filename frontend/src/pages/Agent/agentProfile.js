@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { User, Phone, Truck, MapPin } from "lucide-react";
 import API from "../../api";
+import { Skeleton } from "../../components/Skeleton";
 
 export default function AgentProfile() {
   const [agent, setAgent] = useState(null);
@@ -13,7 +14,22 @@ export default function AgentProfile() {
   }, []);
 
   if (error) return <p className="p-4 text-sm text-red-600">{error}</p>;
-  if (!agent) return <p className="p-4 text-sm text-slate-400">Loading…</p>;
+  if (!agent) {
+    return (
+      <div className="p-4">
+        <h1 className="text-xl font-bold text-slate-900 mb-4">Profile</h1>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 divide-y divide-slate-100">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-4">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-3.5 w-40" />
+              <Skeleton className="h-3.5 w-24" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const rows = [
     { icon: User, label: "Name", value: agent.name },

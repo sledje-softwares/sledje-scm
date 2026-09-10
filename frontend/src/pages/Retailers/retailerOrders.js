@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import API from "../../api";
+import { SkeletonCardGrid } from "../../components/Skeleton";
 import {
   ShoppingCart, Clock, CheckCircle, XCircle, AlertTriangle, Eye, Plus, Filter, Search,
   Package, Calendar, DollarSign, ArrowRight, RefreshCw, FileText, X, Check, Edit, Truck,
@@ -668,13 +669,21 @@ const RetailerOrders = () => {
         </div>
 
         {/* Orders List */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredOrders.map(order => (
-            <OrderCard key={order.id} order={order} />
-          ))}
-        </div>
+        {loading ? (
+          <SkeletonCardGrid
+            count={6}
+            media={false}
+            className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredOrders.map(order => (
+              <OrderCard key={order.id} order={order} />
+            ))}
+          </div>
+        )}
 
-        {filteredOrders.length === 0 && (
+        {!loading && filteredOrders.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <ShoppingCart className="w-8 h-8 text-slate-400" />

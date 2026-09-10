@@ -6,6 +6,7 @@ import {
   Package, Users, ShoppingCart, Clock, AlertCircle, Truck, IndianRupee,
 } from "lucide-react";
 import API from "../../api";
+import { Skeleton, SkeletonStatGrid } from "../../components/Skeleton";
 
 const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const num = (n) => Number(n || 0);
@@ -116,24 +117,34 @@ export default function DistributorOverview() {
           </p>
         </header>
 
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-          {stats.map((stat, i) => (
-            <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
-              <div className="p-2 rounded-lg bg-indigo-50 w-fit mb-3">
-                <stat.icon className="w-5 h-5 text-indigo-600" />
+        {loading ? (
+          <SkeletonStatGrid count={6} className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8" />
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+            {stats.map((stat, i) => (
+              <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+                <div className="p-2 rounded-lg bg-indigo-50 w-fit mb-3">
+                  <stat.icon className="w-5 h-5 text-indigo-600" />
+                </div>
+                <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{stat.value}</p>
               </div>
-              <p className="text-sm font-medium text-slate-500">{stat.label}</p>
-              <p className="text-2xl font-bold text-slate-900 mt-1">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-lg font-semibold text-slate-900">Recent retailer orders</h2>
             </div>
-            {recentOrders.length === 0 ? (
+            {loading ? (
+              <div className="p-6 space-y-4">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-4 w-full" />
+                ))}
+              </div>
+            ) : recentOrders.length === 0 ? (
               <p className="p-6 text-sm text-slate-400">No orders yet.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -173,7 +184,16 @@ export default function DistributorOverview() {
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-lg font-semibold text-slate-900">Retailers by exposure</h2>
             </div>
-            {topRetailers.length === 0 ? (
+            {loading ? (
+              <div className="p-6 space-y-4">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : topRetailers.length === 0 ? (
               <p className="p-6 text-sm text-slate-400">No product bills yet.</p>
             ) : (
               topRetailers.map((r, i) => (
@@ -196,7 +216,16 @@ export default function DistributorOverview() {
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-lg font-semibold text-slate-900">Low stock (available to sell)</h2>
             </div>
-            {lowStock.length === 0 ? (
+            {loading ? (
+              <div className="p-6 space-y-4">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-4 w-14" />
+                  </div>
+                ))}
+              </div>
+            ) : lowStock.length === 0 ? (
               <p className="p-6 text-sm text-slate-400">Nothing running low.</p>
             ) : (
               lowStock.map((p) => (
@@ -218,6 +247,9 @@ export default function DistributorOverview() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-slate-900 mb-6">Order value — last 7 days</h2>
             <div className="h-[250px] w-full">
+              {loading ? (
+                <Skeleton className="h-full w-full" rounded="rounded-lg" />
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -237,6 +269,7 @@ export default function DistributorOverview() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>

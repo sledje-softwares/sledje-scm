@@ -4,6 +4,7 @@ import {
   Clock, IndianRupee,
 } from "lucide-react";
 import API from "../../api";
+import { SkeletonList } from "../../components/Skeleton";
 
 const money = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -135,7 +136,7 @@ export default function RetailerPayment() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <SkeletonList rows={4} />
       ) : groups.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400 text-sm">
           No product bills yet. They appear once a distributor delivers to you.

@@ -9,6 +9,7 @@ import Card2 from "../../assets/carousel/Card2.png";
 import Card3 from "../../assets/carousel/Card3.png";
 import Card4 from "../../assets/carousel/Card4.png";
 import NishantImage from "../../assets/founders/N.png";
+import { Skeleton, SkeletonText } from "../../components/Skeleton";
 
 // --- Connection Management Modal Component ---
 const ConnectionModal = ({ isOpen, onClose }) => {
@@ -462,9 +463,16 @@ const ConnectionModal = ({ isOpen, onClose }) => {
 
               {/* Search Results */}
               {loading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                  <p className="text-slate-500 mt-4">Searching for retailers...</p>
+                <div className="space-y-3">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-3">
+                      <Skeleton className="w-10 h-10" rounded="rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div>
@@ -698,7 +706,20 @@ export default function DistributorProfile() {
       <div className="w-full lg:w-2/5 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 h-fit sticky top-6">
         <h2 className="text-xl font-bold text-slate-900 mb-6">Your Profile</h2>
         {loading ? (
-          <div className="text-center text-slate-500 py-8">Loading profile...</div>
+          <div>
+            <div className="flex flex-col items-center text-center mb-8">
+              <Skeleton className="w-24 h-24 mb-4" rounded="rounded-full" />
+              <Skeleton className="h-5 w-40 mb-2" />
+              <Skeleton className="h-4 w-28 mb-3" />
+              <Skeleton className="h-6 w-24" rounded="rounded-full" />
+            </div>
+            <SkeletonText lines={4} className="mb-8" />
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-12 w-full" rounded="rounded-lg" />
+              <Skeleton className="h-12 w-full" rounded="rounded-lg" />
+            </div>
+          </div>
         ) : distributor ? (
           <>
             <div className="flex flex-col items-center text-center mb-8">

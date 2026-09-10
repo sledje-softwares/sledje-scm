@@ -8,6 +8,7 @@ import SyncStatusBar from "./SyncStatusBar";
 import { useShelf, useRecentSales, useSyncLoop, useReconciliationNeeded } from "../../offline/useOffline";
 import { recordSale, setPrice, saleDetail } from "../../offline/pos";
 import { flushSoon } from "../../offline/sync";
+import { Skeleton } from "../../components/Skeleton";
 
 // OFFLINE-FIRST (docs/16-offline-first.md)
 // ----------------------------------------
@@ -227,7 +228,19 @@ export default function RetailerPOS() {
               </button>
             </div>
 
-            {cart.length === 0 ? (
+            {loading && cart.length === 0 ? (
+              <div className="p-4 divide-y divide-slate-100">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="py-4 flex items-center gap-3">
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3.5 w-2/5" />
+                      <Skeleton className="h-3 w-3/5" />
+                    </div>
+                    <Skeleton className="h-7 w-24" rounded="rounded-md" />
+                  </div>
+                ))}
+              </div>
+            ) : cart.length === 0 ? (
               <div className="p-10 text-center text-slate-400 text-sm">
                 No items yet. Hit <span className="font-medium text-slate-600">Add items</span> to
                 search your shelf or dictate an order.
@@ -296,7 +309,19 @@ export default function RetailerPOS() {
               <Receipt className="w-4 h-4 text-slate-500" />
               <h2 className="font-semibold text-slate-900">Recent sales</h2>
             </div>
-            {history.length === 0 ? (
+            {loading && history.length === 0 ? (
+              <div className="divide-y divide-slate-100">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="p-4 flex items-center justify-between">
+                    <div className="space-y-2">
+                      <Skeleton className="h-3.5 w-24" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : history.length === 0 ? (
               <div className="p-6 text-center text-slate-400 text-sm">No sales yet.</div>
             ) : (
               <div className="divide-y divide-slate-100">

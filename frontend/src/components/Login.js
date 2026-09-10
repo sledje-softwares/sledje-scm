@@ -77,7 +77,20 @@ const LoginPage = ({ userType, onBack, onNavigateToRegister, onNavigateToForgot 
         navigate(userType === 'retailers' ? '/retailer' : '/distributor');
       }, 1000);
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Invalid credentials. Please try again.';
+      // The API sends { error } for 4xx and { error: "Internal server error" }
+      // for 5xx; older handlers used { message }. A request that never got a
+      // response (CORS, timeout, cold-started backend) has no error.response -
+      // that is a connection problem, not a wrong password.
+      const data = error.response?.data;
+      let errorMessage;
+      if (!error.response) {
+        errorMessage = 'Cannot reach the server. Check your connection and try again.';
+      } else if (error.response.status >= 500) {
+        errorMessage = 'Server error. Please try again in a moment.';
+      } else {
+        errorMessage =
+          data?.error || data?.message || 'Invalid credentials. Please try again.';
+      }
       setMessage({ type: 'error', text: errorMessage });
     } finally {
       setLoading(false);
@@ -298,7 +311,16 @@ const RegisterPage = ({ userType, onBack, onNavigateToLogin }) => {
         onNavigateToLogin();
       }, 1500);
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+      const data = error.response?.data;
+      let errorMessage;
+      if (!error.response) {
+        errorMessage = 'Cannot reach the server. Check your connection and try again.';
+      } else if (error.response.status >= 500) {
+        errorMessage = 'Server error. Please try again in a moment.';
+      } else {
+        errorMessage =
+          data?.error || data?.message || 'Registration failed. Please try again.';
+      }
       setMessage({ type: 'error', text: errorMessage });
     } finally {
       setLoading(false);

@@ -23,6 +23,7 @@ import {
   Minus
 } from 'lucide-react';
 import API from "../../api"; // Adjust path as needed
+import { SkeletonCardGrid, Skeleton } from "../../components/Skeleton";
 
 const DistributorOrderManagement = () => {
   const [orders, setOrders] = useState([]);
@@ -776,9 +777,10 @@ const DistributorOrderManagement = () => {
 
 
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
+          <SkeletonCardGrid
+            count={4}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          />
         )}
 
         {/* Orders List */}
@@ -870,7 +872,17 @@ function AssignAgentModal({ order, onClose, onAssigned, setToast }) {
         </div>
         <div className="p-4 overflow-y-auto flex-1">
           {loading ? (
-            <p className="text-sm text-slate-400">Loading available agents…</p>
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center justify-between p-3 border border-slate-200 rounded-lg">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-28" />
+                    <Skeleton className="h-3 w-40" />
+                  </div>
+                  <Skeleton className="h-8 w-16" rounded="rounded-lg" />
+                </div>
+              ))}
+            </div>
           ) : agents.length === 0 ? (
             <p className="text-sm text-slate-500">
               No agents are marked available right now. Agents self-register and toggle their

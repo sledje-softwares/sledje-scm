@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, Check } from "lucide-react";
 import API from "../api";
+import { Skeleton } from "./Skeleton";
 
 const TYPE_ROUTE = {
   retailer: "/retailer/orders",
@@ -25,6 +26,7 @@ export default function NotificationBell({ role }) {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -38,6 +40,8 @@ export default function NotificationBell({ role }) {
       setUnread(Number(count.data.unread || 0));
     } catch {
       /* non-critical */
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -110,7 +114,17 @@ export default function NotificationBell({ role }) {
             )}
           </div>
           <div className="max-h-96 overflow-y-auto">
-            {items.length === 0 ? (
+            {!loaded ? (
+              <div className="divide-y divide-slate-50">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="px-4 py-3 space-y-2">
+                    <Skeleton className="h-3.5 w-1/2" />
+                    <Skeleton className="h-3 w-4/5" />
+                    <Skeleton className="h-2.5 w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : items.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-slate-400">Nothing yet.</p>
             ) : (
               items.map((n) => (

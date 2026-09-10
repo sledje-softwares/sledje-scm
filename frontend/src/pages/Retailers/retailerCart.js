@@ -21,6 +21,7 @@ import {
   Store
 } from "lucide-react";
 import API from "../../api";
+import { Skeleton } from "../../components/Skeleton";
 
 export default function RetailerCart({
   // These props come from retailerShelf.js when this is used as a cart
@@ -269,7 +270,22 @@ export default function RetailerCart({
   if (cartLoading) {
     return (
       <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 text-slate-500">Loading cart...</div>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+          <div className="border-b border-slate-200 p-6 space-y-4">
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="h-4 w-40" />
+            <div className="grid grid-cols-3 gap-4">
+              <Skeleton className="h-16" rounded="rounded-xl" />
+              <Skeleton className="h-16" rounded="rounded-xl" />
+              <Skeleton className="h-16" rounded="rounded-xl" />
+            </div>
+          </div>
+          <div className="flex-1 p-6 space-y-4 bg-slate-50">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-28 w-full" rounded="rounded-xl" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

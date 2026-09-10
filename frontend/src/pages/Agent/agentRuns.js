@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { MapPin, Phone, Package, RefreshCw, KeyRound, XCircle } from "lucide-react";
 import API from "../../api";
+import { SkeletonList } from "../../components/Skeleton";
 
 const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`;
 const pretty = (s) => (s || "").replace(/_/g, " ");
@@ -77,7 +78,7 @@ export default function AgentRuns() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <SkeletonList rows={3} />
       ) : runs.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400 text-sm">
           No runs assigned yet. Make sure you're marked available.

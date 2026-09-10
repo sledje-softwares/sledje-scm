@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Package, Clock, CheckCircle2, RefreshCw } from "lucide-react";
 import API from "../../api";
+import { SkeletonList } from "../../components/Skeleton";
 
 const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const num = (n) => Number(n || 0);
@@ -85,7 +86,7 @@ export default function DistributorPayments() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <SkeletonList rows={4} />
       ) : groups.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-400 text-sm">
           No product bills yet. These appear once you've delivered to a retailer.
