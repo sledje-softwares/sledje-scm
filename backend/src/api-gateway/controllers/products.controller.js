@@ -2,6 +2,11 @@ import ProductsService from "../../modules/products/products.service.js";
 import Papa from "papaparse";
 import xlsx from "xlsx";
 
+// Bounds xlsx.read()'s blast radius on an oversized/malicious file that
+// slips past the multer size limit (xlsx carries known unpatched
+// advisories) - not a substitute for real content sniffing, just a cap.
+const MAX_BULK_IMPORT_ROWS = 5000;
+
 export async function getProducts(req, res, next) {
   try {
     const { distributorshipId, search, page = 1, limit = 20 } = req.query;
@@ -100,6 +105,12 @@ export async function bulkImportProducts(req, res, next) {
       const workbook = xlsx.read(file.buffer);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       rows = xlsx.utils.sheet_to_json(sheet);
+    }
+
+    if (rows.length > MAX_BULK_IMPORT_ROWS) {
+      return res.status(400).json({
+        message: `File has ${rows.length} rows, which exceeds the ${MAX_BULK_IMPORT_ROWS}-row bulk import limit`,
+      });
     }
 
     // Pass logged-in distributor user id + rows

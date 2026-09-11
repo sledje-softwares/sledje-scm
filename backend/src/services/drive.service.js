@@ -8,6 +8,17 @@ const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 
 let driveClient = null;
 
+/**
+ * originalname is attacker-controlled (the client sets it in the multipart
+ * upload) and is used verbatim in the Drive filename below - strip path
+ * separators and anything outside a safe filename character set.
+ */
+function sanitizeFilename(name) {
+    const base = path.basename(String(name || "file"));
+    const cleaned = base.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200);
+    return cleaned || "file";
+}
+
 async function getDriveClient() {
     if (driveClient) return driveClient;
 
@@ -31,7 +42,7 @@ export async function uploadFileToDrive(fileObject, folderId) {
     if (!drive) throw new Error("Google Drive configuration missing");
 
     const fileMetadata = {
-        name: `${Date.now()}-${fileObject.originalname}`,
+        name: `${Date.now()}-${sanitizeFilename(fileObject.originalname)}`,
         parents: folderId ? [folderId] : [], // Upload to root if no folderId
     };
 
@@ -40,6 +51,13 @@ export async function uploadFileToDrive(fileObject, folderId) {
         body: fs.createReadStream(fileObject.path),
     };
 
+    // NOTE: temp-file cleanup is deliberately NOT done here. It used to live
+    // in a finally block on this same try, which meant it never ran when
+    // getDriveClient() returns null above (Drive unconfigured, the default
+    // with no service-account.json) - that throw happens before this try is
+    // ever entered, so the temp file leaked. The caller (upload.routes.js)
+    // created the temp file via multer, so it now owns deleting it in its
+    // own try/finally regardless of how this function resolves.
     try {
         const response = await drive.files.create({
             resource: fileMetadata,
@@ -64,10 +82,5 @@ export async function uploadFileToDrive(fileObject, folderId) {
     } catch (error) {
         console.error("Drive upload error:", error);
         throw error;
-    } finally {
-        // Cleanup temp file
-        if (fs.existsSync(fileObject.path)) {
-            fs.unlinkSync(fileObject.path);
-        }
     }
 }

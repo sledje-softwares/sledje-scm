@@ -6,6 +6,7 @@ import { verifyToken } from "../utils/jwt.js";
 import { db } from "../config/postgres.js";
 import { retailers, distributors } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { corsOriginHandler } from "../config/cors.js";
 
 /**
  * Resolve the profile id (retailers.id / distributors.id) for a logged-in
@@ -29,7 +30,11 @@ async function resolveEntityId(userId, role) {
 export default function startSocketServer(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_ORIGIN || "*",
+      // Shared with app.js's Express CORS policy (backend/src/config/cors.js):
+      // comma-split CLIENT_ORIGIN allowlist, no "*" fallback, warn-once when
+      // unset. Previously this defaulted to origin: "*" independently of
+      // app.js and never comma-split CLIENT_ORIGIN at all (P5-12).
+      origin: corsOriginHandler,
       methods: ["GET", "POST"],
     },
     path: "/socket.io",
@@ -37,7 +42,12 @@ export default function startSocketServer(httpServer) {
 
   /** SOCKET AUTH */
   io.use((socket, next) => {
-    const token = socket.handshake.query?.token || socket.handshake.auth?.token;
+    // Prefer handshake.auth.token (not logged by proxies/access logs) over
+    // the query-string token (which is). The query fallback is kept for now
+    // so already-connected/already-deployed clients still authenticate -
+    // TODO(later release): once the frontend socket client is confirmed to
+    // send handshake.auth.token exclusively, drop the query-string fallback.
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) return next(new Error("Authentication error: missing token"));
 
     const payload = verifyToken(token);
@@ -142,10 +152,23 @@ export default function startSocketServer(httpServer) {
 
               targets = [...new Set(targets)];
 
-              if (targets.length === 0)
-                io.emit("event", envelope);
-              else
+              if (targets.length === 0) {
+                // No target room could be derived from this event's payload.
+                // This used to fan out to every connected client across
+                // every tenant (P5-11) - fail closed instead: drop the
+                // message and log it so a missing-target event is
+                // diagnosable rather than silently broadcast. A payload can
+                // opt into a deliberate broadcast explicitly.
+                if (payload.broadcast === true) {
+                  io.emit("event", envelope);
+                } else {
+                  console.warn(
+                    `⚠️  Socket fan-out: no target room derivable for subject "${subject}" - dropping (set payload.broadcast=true to force a broadcast)`
+                  );
+                }
+              } else {
                 targets.forEach(room => io.to(room).emit("event", envelope));
+              }
 
               msg.ack();
             } catch (e) {
