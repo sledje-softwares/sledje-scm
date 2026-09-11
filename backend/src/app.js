@@ -51,7 +51,15 @@ app.use(
           origin: (origin, cb) => {
             // origin is undefined for same-origin/non-browser requests (curl, mobile apps)
             if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-            cb(new Error("Not allowed by CORS"));
+            // A disallowed origin is a rejected request, not a server fault -
+            // without an explicit status the error middleware classifies this
+            // as a 500 "Internal server error", which looks like the backend
+            // crashed when really CLIENT_ORIGIN just needs the caller's origin.
+            const err = new Error(
+              `Origin ${origin} is not allowed by CORS (set CLIENT_ORIGIN)`
+            );
+            err.status = 403;
+            cb(err);
           },
         }
       : undefined
