@@ -7,13 +7,15 @@ const { Pool } = pkg;
 
 const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
-  // Supabase (like most managed Postgres) requires TLS on external
-  // connections; local dev's docker-compose Postgres (localhost:5433) has
-  // none. rejectUnauthorized: false because Supabase's certificate chain
-  // isn't in Node's default trust store - this accepts encryption without
-  // pinning Supabase's CA. Gated on NODE_ENV, which render.yaml sets to
-  // "production" and .env.example sets to "development" for local dev.
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+  // TLS-on by default, opt-out via POSTGRES_SSL. Supabase (like most managed
+  // Postgres) requires TLS on external connections; rejectUnauthorized: false
+  // because Supabase's certificate chain isn't in Node's default trust store
+  // - this accepts encryption without pinning Supabase's CA. Previously this
+  // was gated on NODE_ENV === "production", which meant any non-"production"
+  // environment (e.g. staging) silently connected with no TLS at all. Only
+  // the docker-compose local Postgres (localhost:5433, no TLS support) should
+  // set POSTGRES_SSL=false.
+  ssl: process.env.POSTGRES_SSL === "false" ? false : { rejectUnauthorized: false }
 });
 
 export const db = drizzle(pool);

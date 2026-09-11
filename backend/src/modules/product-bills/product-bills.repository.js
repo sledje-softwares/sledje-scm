@@ -5,7 +5,6 @@ import {
   productBillLayers,
   productBillTransactions,
   productDeliveryLog,
-  outbox,
   productVariants,
   products,
   distributors,
@@ -351,13 +350,6 @@ const ProductBillsRepo = {
       .orderBy(productBillTransactions.date);
 
     return rows;
-  },
-
-  async insertOutbox(tx, eventType, payload) {
-    await tx.insert(outbox).values({
-      eventType,
-      payload,
-    });
   },
 };
 

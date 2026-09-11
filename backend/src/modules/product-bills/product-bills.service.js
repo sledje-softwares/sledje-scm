@@ -105,18 +105,9 @@ const ProductBillsService = {
         balance: String(newOutstanding),
         billId: bill.id,
       });
-
-      await ProductBillsRepo.insertOutbox(tx, "product_bills.payment", {
-        billId: bill.id,
-        amount: pay,
-        paymentMethod,
-        note,
-        retailerId: bill.retailerId,
-        distributorId: bill.distributorId,
-      });
     });
 
-    // best-effort publish now (outbox consumer is the reliable one)
+    // best-effort publish; there is no outbox/guaranteed-delivery layer.
     publishEvent("product_bills.payment", {
       billId: bill.id,
       amount: pay,

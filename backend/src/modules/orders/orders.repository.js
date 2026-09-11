@@ -7,7 +7,6 @@ import {
   retailers,
   distributors,
   users,
-  outbox,
   distributorInventory,
   deliveries,
   deliveryAgents,
@@ -66,13 +65,6 @@ export default {
 
   async deleteOrderItemsByOrderId(txOrDb, orderId) {
     await txOrDb.delete(orderItems).where(eq(orderItems.orderId, orderId));
-  },
-
-  async insertOutbox(tx, eventType, payload) {
-    await tx.insert(outbox).values({
-      eventType,
-      payload
-    });
   },
 
   // helper lookups
