@@ -146,6 +146,49 @@ export const distributorships = pgTable("distributorships", {
 
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+/* ===============================
+  6b. DISTRIBUTORSHIP MEMBERS (NEW - Phase 2b)
+
+  A distributorship is a shared catalogue namespace, not an owned one - it
+  gets no owner column. Membership is this many-to-many table instead: a
+  distributor needs an ACTIVE row here before they can create/edit/delete the
+  distributorship's products or import its variants into their own
+  inventory. Mirrors connection_requests' pending -> approved/rejected shape
+  (connections.repository.js), except the terminal "granted" state is named
+  "active" here since it doubles as the membership row itself (there is no
+  separate "distributorship_connections" table the way retailer<->distributor
+  has connections vs connection_requests).
+  =============================== */
+
+export const distributorshipMembers = pgTable(
+  "distributorship_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    distributorId: uuid("distributor_id")
+      .notNull()
+      .references(() => distributors.id, { onDelete: "cascade" }),
+
+    distributorshipId: uuid("distributorship_id")
+      .notNull()
+      .references(() => distributorships.id, { onDelete: "cascade" }),
+
+    status: text("status").notNull().default("pending"), // pending | active | rejected
+
+    invitedBy: uuid("invited_by").references(() => distributors.id),
+
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    unique("uq_distributorship_member").on(
+      table.distributorId,
+      table.distributorshipId
+    ),
+  ]
+);
+
 /* ===============================
   7. PRODUCTS (GLOBAL CATALOG)
   =============================== */
@@ -163,6 +206,23 @@ export const products = pgTable("products", {
 
   category: text("category"),
   subcategory: text("subcategory"),
+
+  // Curation (docs/02-product-billing.md membership model, Phase 2c): the
+  // distributor who created this product. Update/archive is limited to this
+  // distributor among the distributorship's active members, UNLESS a
+  // *different* distributor has since stocked it (a distributor_inventory
+  // row exists on one of its variants) - at that point the product becomes
+  // append-only for everyone. Nullable because pre-existing rows have no
+  // known creator.
+  createdByDistributorId: uuid("created_by_distributor_id").references(
+    () => distributors.id
+  ),
+
+  // Soft delete (P5-4): a hard DELETE here used to cascade into
+  // distributor_inventory / product_bills / inventory rows that carry another
+  // tenant's billing history. archivedAt hides a product from catalogue reads
+  // without destroying anything referencing its variants.
+  archivedAt: timestamp("archived_at"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -187,6 +247,9 @@ export const productVariants = pgTable("product_variants", {
 
   gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).default("0"),
   isTaxInclusive: boolean("is_tax_inclusive").default(false),
+
+  // See products.archivedAt above - same reasoning, one level down.
+  archivedAt: timestamp("archived_at"),
 
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -68,9 +68,14 @@ export default {
     return row || null;
   },
 
-  async upsertInventory(distributorId, variantId, { stock, costPrice, sellingPrice, expiry, lowStockThreshold }) {
+  async upsertInventory(
+    distributorId,
+    variantId,
+    { stock, costPrice, sellingPrice, expiry, lowStockThreshold },
+    txOrDb = db
+  ) {
     // check if exists
-    const [existing] = await db
+    const [existing] = await txOrDb
       .select()
       .from(distributorInventory)
       .where(
@@ -81,7 +86,7 @@ export default {
       );
 
     if (existing) {
-      const [updated] = await db
+      const [updated] = await txOrDb
         .update(distributorInventory)
         .set({
           stock: (stock ?? existing.stock) ?? 0,
@@ -95,7 +100,7 @@ export default {
       return updated;
     }
 
-    const [row] = await db
+    const [row] = await txOrDb
       .insert(distributorInventory)
       .values({
         distributorId,
@@ -108,6 +113,26 @@ export default {
       })
       .returning();
     return row;
+  },
+
+  /**
+   * Resolve a variant's owning product and distributorship, for the Phase 2b
+   * membership check in importVariant() - a distributor may only import a
+   * variant into their own inventory if they hold active membership in the
+   * distributorship the variant's product belongs to.
+   */
+  async findVariantProductInfo(variantId) {
+    const [row] = await db
+      .select({
+        variantId: productVariants.id,
+        productId: products.id,
+        distributorshipId: products.distributorshipId,
+        createdByDistributorId: products.createdByDistributorId,
+      })
+      .from(productVariants)
+      .innerJoin(products, eq(productVariants.productId, products.id))
+      .where(eq(productVariants.id, variantId));
+    return row || null;
   },
 
   async listForDistributor(distributorId) {
