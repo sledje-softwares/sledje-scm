@@ -1,6 +1,7 @@
 // src/api-gateway/routes/product-bills.routes.js
 import express from "express";
 import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireRole } from "../middlewares/role.middleware.js";
 import {
   listBills,
   getBill,
@@ -12,6 +13,7 @@ const router = express.Router();
 
 // all product-bill routes require auth
 router.use(requireAuth);
+router.use(requireRole("retailer", "distributor"));
 
 // GET /api/product-bills?role-based
 router.get("/", listBills);

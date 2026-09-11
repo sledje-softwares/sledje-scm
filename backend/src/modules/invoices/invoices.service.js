@@ -13,16 +13,12 @@ import {
 import { eq, and, gte, lte } from "drizzle-orm";
 import { publishEvent } from "../../config/nats-streams.js";
 import { generateInvoicePDF } from "../../utils/invoice-pdf.js";
+import { resolveActor, assertParty } from "../identity/actor.js";
 
 // ======= Helpers =======
 
 async function getDistributorFromUser(userId) {
   const rows = await db.select().from(distributors).where(eq(distributors.userId, userId));
-  return rows[0] || null;
-}
-
-async function getRetailerFromUser(userId) {
-  const rows = await db.select().from(retailers).where(eq(retailers.userId, userId));
   return rows[0] || null;
 }
 
@@ -167,15 +163,8 @@ export default {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
     if (!invoice) throw new Error("Invoice not found");
 
-    // auth check
-    if (user.role === "retailer") {
-      const r = await getRetailerFromUser(user.id);
-      if (invoice.retailerId !== r.id) throw new Error("Forbidden");
-    }
-    if (user.role === "distributor") {
-      const d = await getDistributorFromUser(user.id);
-      if (invoice.distributorId !== d.id) throw new Error("Forbidden");
-    }
+    const actor = await resolveActor(user);
+    assertParty(actor, invoice);
 
     const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
 
@@ -184,14 +173,18 @@ export default {
 
   // ===== LIST invoices =====
   async listInvoices(user, filters = {}) {
+    // resolveActor throws AppError("Forbidden", 403) for any role it doesn't
+    // recognize, before any query runs - previously an unrecognized role hit
+    // no branch below and this returned every invoice in the database
+    // unfiltered (P5-3).
+    const actor = await resolveActor(user);
+
     let q = db.select().from(invoices);
 
-    if (user.role === "retailer") {
-      const r = await getRetailerFromUser(user.id);
-      q = q.where(eq(invoices.retailerId, r.id));
-    } else if (user.role === "distributor") {
-      const d = await getDistributorFromUser(user.id);
-      q = q.where(eq(invoices.distributorId, d.id));
+    if (actor.role === "retailer") {
+      q = q.where(eq(invoices.retailerId, actor.id));
+    } else {
+      q = q.where(eq(invoices.distributorId, actor.id));
     }
 
     q = q.orderBy(invoices.createdAt, "desc");
