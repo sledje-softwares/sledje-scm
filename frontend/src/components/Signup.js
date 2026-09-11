@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import API from "../api";
 import { Building2, User, Phone, Mail, Lock, FileText, MapPin, ArrowRight, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "./AuthContext";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -17,7 +18,10 @@ export default function SignUp() {
   const [pincode, setPincode] = useState("");
   const [location, setLocation] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -67,7 +71,12 @@ export default function SignUp() {
       });
 
       // alert("Registration successful!");
-      localStorage.setItem("token", res.data.token);
+      // Route through AuthContext.login() (same calling convention as
+      // Login.js: login({ user: <raw backend response> })) instead of
+      // writing "token" to localStorage directly - the direct write left
+      // "isAuthenticated"/"user" unset even though the token was already
+      // attached to every subsequent request, leaving the app half-logged-in.
+      login({ user: res.data });
       setStep(2);
     } catch (err) {
       alert(err.response?.data?.message || "Registration failed");
@@ -77,13 +86,24 @@ export default function SignUp() {
     }
   };
 
-  const verifyOtp = () => {
-    // Mock OTP verification for now
-    console.log("Verifying OTP", otp);
-    setStep(3);
-    setTimeout(() => {
-      navigate('/login');
-    }, 2000);
+  const verifyOtp = async () => {
+    setOtpError("");
+    setOtpLoading(true);
+    try {
+      const res = await API.post("/auth/verify-otp", { email, otp });
+      if (res.data?.verified) {
+        setStep(3);
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        setOtpError("Incorrect OTP. Please try again.");
+      }
+    } catch (err) {
+      setOtpError(err.response?.data?.message || err.response?.data?.error || "OTP verification failed. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   return (
@@ -295,11 +315,16 @@ export default function SignUp() {
                 maxLength={6}
               />
 
+              {otpError && (
+                <p className="text-sm text-red-600 font-medium mb-4">{otpError}</p>
+              )}
+
               <button
                 onClick={verifyOtp}
-                className="w-full max-w-xs mx-auto bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-sm"
+                disabled={otpLoading}
+                className="w-full max-w-xs mx-auto bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Verify OTP
+                {otpLoading ? "Verifying..." : "Verify OTP"}
               </button>
             </div>
           ) : (

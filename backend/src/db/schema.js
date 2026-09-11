@@ -376,11 +376,14 @@ export const ledger = pgTable("ledger", {
   distributorId: uuid("distributor_id").references(() => distributors.id),
 
   type: text("type").notNull(), // debit | credit
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-  balance: numeric("balance", { precision: 10, scale: 2 }).notNull(),
+  // Widened to match product_bills / invoices (numeric(14,2)), which feed
+  // this table — a representable bill/invoice balance could otherwise
+  // overflow a numeric(10,2) ledger row on payment.
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  balance: numeric("balance", { precision: 14, scale: 2 }).notNull(),
 
   orderId: uuid("order_id"),
-  billId: uuid("productBillId"),
+  billId: uuid("product_bill_id"),
 
   // Generic reference type/id for any entity (invoice, payment, adjustment,
   // sale). Deliberately text, not uuid: a sale is identified by a

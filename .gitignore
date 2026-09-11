@@ -6,3 +6,4 @@ backend/nats-data/
 # Editor/OS noise
 .DS_Store
 *.log
+.claude/worktrees/
