@@ -6,6 +6,14 @@ import SyncService from "../../modules/sync/sync.service.js";
 
 const router = express.Router();
 
+// Offline-POS devices can batch a long backlog of operations into one call
+// after an extended offline period (docs/16-offline-first.md). app.js's
+// default express.json() limit (200kb, P5-6) would truncate/413 exactly the
+// devices this design exists for, so this router gets its own larger parser
+// - and is mounted in app.js BEFORE the default one is registered, so this
+// is the only parser a /sync request body ever reaches.
+router.use(express.json({ limit: "5mb" }));
+
 router.use(requireAuth, requireRole("retailer"));
 
 /**

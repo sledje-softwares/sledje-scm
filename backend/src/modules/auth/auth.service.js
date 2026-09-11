@@ -7,6 +7,7 @@ import { publishUserRegistered, publishPasswordReset } from "./auth.events.js";
 import { eq } from "drizzle-orm";
 import { signToken, verifyToken } from "../../utils/jwt.js";
 import { generateOtp, otpExpiryDate } from "../../utils/otp.js";
+import { AppError } from "../../api-gateway/middlewares/error.middleware.js";
 
 import {
   users,
@@ -17,6 +18,44 @@ import {
 } from "../../db/schema.js";
 
 const SALT_ROUNDS = 10;
+
+// Must match auth.repository.js's MAX_ATTEMPTS - used only for the
+// "N attempts remaining" message, not for the lock decision itself (that's
+// made by recordFailedOtpAttempt, which is the source of truth on lockedUntil).
+const MAX_OTP_ATTEMPTS = 5;
+
+/**
+ * Shared by the standalone /auth/verify-otp endpoint AND resetPassword, so a
+ * wrong attempt on either one increments the same cumulative counter (they
+ * share one row per email - P5-5). Checks lock/expiry/consumed BEFORE ever
+ * comparing the submitted code, mirrors deliveries.service.js's confirmDelivery.
+ *
+ * Does NOT consume the OTP - only resetPassword's success does that, in the
+ * same transaction as the password change, so a successful reset is what
+ * actually invalidates the code.
+ */
+async function checkOtpAndRecordAttempt(email, otp) {
+  const row = await AuthRepo.getActiveOtp(email);
+  if (!row || row.consumedAt || new Date(row.expiresAt) <= new Date()) {
+    throw new AppError("Invalid or expired OTP", 400);
+  }
+  if (row.lockedUntil && new Date(row.lockedUntil) > new Date()) {
+    throw new AppError("Too many incorrect attempts. Try again later.", 429);
+  }
+
+  if (String(otp).trim() !== row.otp) {
+    const patch = await AuthRepo.recordFailedOtpAttempt(email, row.attempts);
+    const remaining = Math.max(0, MAX_OTP_ATTEMPTS - patch.attempts);
+    throw new AppError(
+      patch.lockedUntil
+        ? "Too many incorrect attempts. Locked for 15 minutes."
+        : `Incorrect OTP. ${remaining} attempt(s) remaining.`,
+      patch.lockedUntil ? 429 : 400
+    );
+  }
+
+  return row;
+}
 
 export default {
   // ---------- REGISTER RETAILER ----------
@@ -82,7 +121,11 @@ export default {
       return { user: userRow, retailer: retailerRow };
     });
 
-    const token = signToken({ id: created.user.id, role: "retailer" });
+    const token = signToken({
+      id: created.user.id,
+      role: "retailer",
+      tokenVersion: created.user.tokenVersion,
+    });
 
     publishUserRegistered({
       userId: created.user.id,
@@ -117,7 +160,7 @@ export default {
       .from(retailers)
       .where(eq(retailers.userId, user.id));
 
-    const token = signToken({ id: user.id, role: user.role });
+    const token = signToken({ id: user.id, role: user.role, tokenVersion: user.tokenVersion });
 
     return {
       token,
@@ -192,6 +235,7 @@ export default {
     const token = signToken({
       id: created.user.id,
       role: "distributor",
+      tokenVersion: created.user.tokenVersion,
     });
 
     publishUserRegistered({
@@ -225,7 +269,7 @@ export default {
       .from(distributors)
       .where(eq(distributors.userId, user.id));
 
-    const token = signToken({ id: user.id, role: user.role });
+    const token = signToken({ id: user.id, role: user.role, tokenVersion: user.tokenVersion });
 
     return {
       token,
@@ -254,25 +298,36 @@ export default {
   },
 
   // ---------- VERIFY OTP ----------
+  // Used by the standalone /auth/verify-otp endpoint (if the frontend calls
+  // it separately from reset). Checks lock/expiry and records a failed
+  // attempt on a wrong code, but does NOT consume the OTP - resetPassword
+  // re-verifies and is the only thing that consumes it, so a bad guess here
+  // can't be used to "pre-clear" a code that a subsequent reset call skips
+  // re-checking.
   async verifyOtp(email, otp) {
-    // uses AuthRepo.getValidOtp — returns row if OTP exists and not expired
-    const row = await AuthRepo.getValidOtp(email, otp);
-    return !!row;
+    await checkOtpAndRecordAttempt(email, otp);
+    return true;
   },
 
   // ---------- RESET PASSWORD ----------
+  // Re-verifies the OTP server-side (does not trust a prior verifyOtp call -
+  // preserves the one thing the audit found already correct here). On
+  // success, the password hash update, the tokenVersion bump (session
+  // invalidation - P5-8) and consuming the OTP (P5-5) all happen in the same
+  // transaction, so a reset is atomically "new password + old sessions dead +
+  // code can't be replayed."
   async resetPassword(email, otp, newPassword) {
-    const row = await AuthRepo.getValidOtp(email, otp);
-    if (!row) throw new Error("Invalid or expired OTP");
+    await checkOtpAndRecordAttempt(email, otp);
 
-    // find user
     const user = await AuthRepo.findUserByEmail(email);
     if (!user) throw new Error("User not found");
 
     const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
-    await AuthRepo.updatePassword(user.id, hashed);
-    await AuthRepo.deleteOtp(email);
+    await db.transaction(async (tx) => {
+      await AuthRepo.updatePassword(tx, user.id, hashed);
+      await AuthRepo.consumeOtp(tx, email);
+    });
 
     // publish event
     publishPasswordReset({ userId: user.id, email }).catch((e) => console.warn(e.message));
