@@ -12,7 +12,6 @@ import {
   users,
   retailers,
   distributors,
-  outbox,
   otpCodes,
 } from "../../db/schema.js";
 
@@ -66,18 +65,6 @@ export default {
 
         })
         .returning();
-
-      // 3) Insert outbox entry
-      await tx.insert(outbox).values({
-        eventType: "users.registered",      // ⚠ confirm schema uses camelCase or snake_case
-        payload: {
-          userId: userRow.id,
-          role: "retailer",
-          email,
-          retailer: retailerRow,
-          createdAt: userRow.createdAt,     // ⚠ confirm field name
-        },
-      });
 
       return { user: userRow, retailer: retailerRow };
     });
@@ -174,17 +161,6 @@ export default {
           address,
         })
         .returning();
-
-      await tx.insert(outbox).values({
-        eventType: "users.registered",
-        payload: {
-          userId: userRow.id,
-          role: "distributor",
-          email,
-          distributor: distRow,
-          createdAt: userRow.createdAt,
-        },
-      });
 
       return { user: userRow, distributor: distRow };
     });

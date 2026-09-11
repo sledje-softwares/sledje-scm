@@ -7,7 +7,6 @@ import {
   retailers,
   distributors,
   productVariants,
-  outbox
 } from "../../db/schema.js";
 
 import { eq, and, gte, lte } from "drizzle-orm";
@@ -143,12 +142,6 @@ export default {
         });
       }
 
-      // outbox event
-      await tx.insert(outbox).values({
-        eventType: "invoice.generated",
-        payload: { invoiceId: inv.id, retailerId, distributorId: distributor.id }
-      });
-
       return inv;
     });
 
@@ -220,11 +213,6 @@ export default {
         .set({ status: "paid", updatedAt: new Date() })
         .where(eq(invoices.id, invoiceId))
         .returning();
-
-      await tx.insert(outbox).values({
-        eventType: "invoice.paid",
-        payload: { invoiceId }
-      });
 
       return updated;
     });

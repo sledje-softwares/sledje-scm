@@ -28,14 +28,15 @@ import { eq, and, inArray } from "drizzle-orm";
 
 /**
  * Business logic:
- * - createOrder: validate distributor ownership, compute totals, write order + items inside tx and outbox.
+ * - createOrder: validate distributor ownership, compute totals, write order + items inside tx.
  * - modifyOrder: allowed when status pending; updates items and status -> modified
  * - cancelOrder: allowed by retailer before processing
  * - completeOrder: retailer confirms delivery with code
  * - approveModifiedOrder: retailer approves or rejects modifications
  * - distributor flows: get orders, accept/reject/modify (processDistributorOrder)
  *
- * NOTE: All writes that must produce events insert a row into outbox inside the same transaction.
+ * NOTE: events are published best-effort via publishEvent/publishOrder* after
+ * the transaction commits; there is no outbox/guaranteed-delivery layer.
  */
 
 /**
@@ -139,7 +140,7 @@ export default {
       expectedDelivery: payload.expectedDelivery || null
     };
 
-    // Start transaction: insert order, items, and outbox
+    // Start transaction: insert order and items
     // Delivery confirmation code (docs/15-delivery-confirmation.md): generated
     // now, shown to the retailer exactly once in this response, and required
     // to complete the order later. Stored encrypted, never in plaintext.
@@ -164,12 +165,6 @@ export default {
       const insertedItems = await OrdersRepo.insertOrderItems(tx, itemsToInsert);
 
       await DeliveryCodeRepo.create(tx, createdOrder.id, encrypted);
-
-      // write outbox entry for guaranteed publish
-      await OrdersRepo.insertOutbox(tx, "orders.created", {
-        order: createdOrder,
-        items: insertedItems
-      });
 
       await notifyOrderCreated(tx, createdOrder);
 
@@ -262,9 +257,6 @@ export default {
       }));
       const inserted = await OrdersRepo.insertOrderItems(tx, itemsToInsert);
 
-      // outbox entry
-      await OrdersRepo.insertOutbox(tx, "orders.modified", { order: updatedOrder, items: inserted });
-
       return { order: updatedOrder, items: inserted };
     });
 
@@ -284,7 +276,6 @@ export default {
 
     const result = await db.transaction(async (tx) => {
       const updated = await OrdersRepo.updateOrder(tx, orderId, { status: "cancelled", notes: `${order.notes || ""}\nCANCEL_REASON:${reason || ""}` });
-      await OrdersRepo.insertOutbox(tx, "orders.cancelled", { order: updated });
       return updated;
     });
 
@@ -356,7 +347,6 @@ export default {
         dispatchedAt: new Date(),
       });
       await DeliveriesRepo.createForOrder(tx, orderId);
-      await OrdersRepo.insertOutbox(tx, "orders.dispatched", { order: updated });
       await notifyOrderDispatched(tx, order);
       return updated;
     });
@@ -395,7 +385,6 @@ export default {
     const status = approved ? "processing" : "cancelled"; // or 'pending' depending on your flow
     const updated = await db.transaction(async (tx) => {
       const u = await OrdersRepo.updateOrder(tx, orderId, { status });
-      await OrdersRepo.insertOutbox(tx, "orders.modified.approval", { order: u, approved });
       return u;
     });
 
@@ -444,7 +433,6 @@ export default {
           );
         }
 
-        await OrdersRepo.insertOutbox(tx, "orders.accepted", { order: updated });
         await notifyOrderAccepted(tx, order);
         return updated;
       });
@@ -455,7 +443,6 @@ export default {
     if (payload.action === "reject") {
       const result = await db.transaction(async (tx) => {
         const updated = await OrdersRepo.updateOrder(tx, orderId, { status: "cancelled", notes: payload.rejectionReason || null });
-        await OrdersRepo.insertOutbox(tx, "orders.rejected", { order: updated });
         await notifyOrderRejected(tx, order, payload.rejectionReason);
         return updated;
       });
@@ -505,8 +492,6 @@ export default {
 
         const inserted = await OrdersRepo.insertOrderItems(tx, itemsToInsert);
 
-        await OrdersRepo.insertOutbox(tx, "orders.modified.by_distributor", { order: updatedOrder, items: inserted });
-
         return { order: updatedOrder, items: inserted };
       });
 
@@ -530,7 +515,6 @@ export default {
 
     const updated = await db.transaction(async (tx) => {
       const u = await OrdersRepo.updateOrder(tx, orderId, { status });
-      await OrdersRepo.insertOutbox(tx, "orders.status.updated", { order: u });
       return u;
     });
 
