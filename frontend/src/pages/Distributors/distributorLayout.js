@@ -78,7 +78,6 @@ export default function Layout() {
   const { logout } = useAuth(); // Import the logout function from AuthContext
   const handleLogout = () => {
     // Clear user session or token (if stored in localStorage or cookies)
-    localStorage.removeItem("userInfo");
     logout(); // Call the logout function from AuthContext
     alert("You have been logged out successfully.");
     // Close dropdown

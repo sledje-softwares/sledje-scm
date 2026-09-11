@@ -6,12 +6,16 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
 
-  // Check authentication status from localStorage on app load
+  // Check authentication status from localStorage on app load.
+  // isAuthenticated is derived from whether a token is present, not read
+  // back as its own independently-stored flag - a separate flag can drift
+  // out of sync with the actual token (e.g. cleared by one code path but
+  // not the other). A full JWT-expiry check is out of scope for this pass;
+  // presence is enough.
   useEffect(() => {
-  
-    const storedAuth = localStorage.getItem("isAuthenticated");
+    const storedToken = localStorage.getItem("token");
     const storedUser = localStorage.getItem("user");
-    setIsAuthenticated(storedAuth === "true");
+    setIsAuthenticated(!!storedToken);
     setUser(storedUser ? JSON.parse(storedUser) : null);
   }, []);
 
@@ -27,16 +31,19 @@ export const AuthProvider = ({ children }) => {
     setUser(profile);
     localStorage.setItem("token", data.user.token);
     localStorage.setItem("user", JSON.stringify(profile));
+    // isAuthenticated is derived from token presence (see the load-time
+    // effect above); "token" is the source of truth, no separate flag.
     setIsAuthenticated(true);
-    localStorage.setItem("isAuthenticated", "true"); // Persist login state
   };
 
   const logout = () => {
     setIsAuthenticated(false);
     setUser(null);
-    localStorage.removeItem("isAuthenticated"); // Clear login state
     localStorage.removeItem("user");
-  localStorage.removeItem("token");
+    localStorage.removeItem("token");
+    // Legacy key from a prior localStorage-flag scheme; harmless to clear
+    // if it's still lying around from before this fix.
+    localStorage.removeItem("isAuthenticated");
   };
 
   return (

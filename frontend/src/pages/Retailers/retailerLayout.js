@@ -59,7 +59,6 @@ export default function RetailerLayout() {
 
 
     // Step 3: Proceed with logout
-    localStorage.removeItem("userInfo");
     logout();
     alert("You have been logged out successfully.");
     setShowMobileDropdown(false);

@@ -38,9 +38,14 @@ export default {
   },
 
   async updateProfile(userId, data) {
-    const updated = await db
-      .update(distributors)
-      .set({
+    // Build the patch from only the keys actually present in `data`, rather
+    // than relying on drizzle-orm's internal `mapUpdateSet` to drop
+    // undefined-valued keys before it builds SQL (it currently does, but
+    // that's an implementation detail we shouldn't depend on across a
+    // version bump). A caller that passes only `profilePictureUrl` (e.g.
+    // the profile-picture upload route) must only ever touch that column.
+    const patch = Object.fromEntries(
+      Object.entries({
         companyName: data.companyName,
         ownerName: data.ownerName,
         gstNumber: data.gstNumber,
@@ -49,7 +54,16 @@ export default {
         location: data.location,
         address: data.address,
         profilePictureUrl: data.profilePictureUrl,
-      })
+      }).filter(([, value]) => value !== undefined)
+    );
+
+    if (Object.keys(patch).length === 0) {
+      throw new Error("updateProfile: no fields to update");
+    }
+
+    const updated = await db
+      .update(distributors)
+      .set(patch)
       .where(eq(distributors.userId, userId))
       .returning();
 
