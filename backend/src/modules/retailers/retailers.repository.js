@@ -25,6 +25,7 @@ export default {
         pincode: data.pincode,
         location: data.location,
         address: data.address,
+        profilePictureUrl: data.profilePictureUrl,
       })
       .where(eq(retailers.userId, userId))
       .returning();
