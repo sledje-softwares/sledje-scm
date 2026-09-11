@@ -72,6 +72,14 @@ jobs:
         working-directory: backend
         run: node -e "import('./src/app.js').then(()=>console.log('ok')).catch(e=>{console.error(e.message);process.exit(1)})"
 
+      # node:test suite (backend/test/*.test.js). Truncates its tables, so it
+      # must run before verify_offline_sync.js, on a still-clean database.
+      - name: Backend test suite
+        working-directory: backend
+        env:
+          VERIFY_I_KNOW_THIS_TRUNCATES: "1"
+        run: npm test
+
       # The money model. If these numbers move, something is wrong.
       - name: Offline sync + two-stage billing suite
         working-directory: backend
