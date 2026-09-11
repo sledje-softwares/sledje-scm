@@ -4,6 +4,7 @@ import { ledger } from "../../db/schema.js";
 import ProductBillsRepo from "./product-bills.repository.js";
 import OrdersRepo from "../orders/orders.repository.js";
 import { publishEvent } from "../../config/nats-streams.js";
+import { resolveActor, assertParty } from "../identity/actor.js";
 
 const ProductBillsService = {
   /**
@@ -33,20 +34,8 @@ const ProductBillsService = {
     const bill = await ProductBillsRepo.getBillById(billId);
     if (!bill) throw new Error("Bill not found");
 
-    // permission check
-    if (user.role === "retailer") {
-      const retailer = await OrdersRepo.findRetailerByUserId(user.id);
-      if (!retailer || bill.retailerId !== retailer.id) {
-        throw new Error("Forbidden");
-      }
-    }
-
-    if (user.role === "distributor") {
-      const dist = await OrdersRepo.findDistributorByUserId(user.id);
-      if (!dist || bill.distributorId !== dist.id) {
-        throw new Error("Forbidden");
-      }
-    }
+    const actor = await resolveActor(user);
+    assertParty(actor, bill);
 
     const txs = await ProductBillsRepo.listTransactionsForBill(bill.id);
     return { bill, transactions: txs };
@@ -56,14 +45,8 @@ const ProductBillsService = {
     const bill = await ProductBillsRepo.getBillById(billId);
     if (!bill) throw new Error("Bill not found");
 
-    if (user.role === "retailer") {
-      const retailer = await OrdersRepo.findRetailerByUserId(user.id);
-      if (!retailer || bill.retailerId !== retailer.id) throw new Error("Forbidden");
-    }
-    if (user.role === "distributor") {
-      const dist = await OrdersRepo.findDistributorByUserId(user.id);
-      if (!dist || bill.distributorId !== dist.id) throw new Error("Forbidden");
-    }
+    const actor = await resolveActor(user);
+    assertParty(actor, bill);
 
     return ProductBillsRepo.listTransactionsForBill(bill.id);
   },

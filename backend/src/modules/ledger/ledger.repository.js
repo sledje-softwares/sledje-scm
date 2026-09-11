@@ -8,6 +8,7 @@ import {
   invoiceItems
 } from "../../db/schema.js";
 import { eq, and, inArray } from "drizzle-orm";
+import { AppError } from "../../api-gateway/middlewares/error.middleware.js";
 
 const LedgerRepo = {
   async getLedgerForRetailer(retailerId) {
@@ -45,6 +46,7 @@ const LedgerRepo = {
     if (user.role === "distributor") {
       return db.select().from(productBills).where(eq(productBills.distributorId, user.entityId));
     }
+    throw new AppError("Forbidden", 403);
   },
 
   async getVariantSummaries(user) {

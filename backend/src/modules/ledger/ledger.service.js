@@ -4,6 +4,8 @@ import ProductBillsRepo from "../product-bills/product-bills.repository.js";
 import { db } from "../../config/postgres.js";
 import { eq } from "drizzle-orm";
 import { productBills, productVariants, invoices } from "../../db/schema.js";
+import { resolveActor, assertParty } from "../identity/actor.js";
+import { AppError } from "../../api-gateway/middlewares/error.middleware.js";
 
 const LedgerService = {
   // Main ledger for logged-in user
@@ -27,16 +29,8 @@ const LedgerService = {
     const bill = await ProductBillsRepo.getBillById(billId);
     if (!bill) throw new Error("Bill not found");
 
-    // Auth
-    if (user.role === "retailer") {
-      const r = await OrdersRepo.findRetailerByUserId(user.id);
-      if (!r || r.id !== bill.retailerId) throw new Error("Forbidden");
-    }
-
-    if (user.role === "distributor") {
-      const d = await OrdersRepo.findDistributorByUserId(user.id);
-      if (!d || d.id !== bill.distributorId) throw new Error("Forbidden");
-    }
+    const actor = await resolveActor(user);
+    assertParty(actor, bill);
 
     return LedgerRepo.getLedgerForBill(billId);
   },
@@ -47,18 +41,13 @@ const LedgerService = {
 
     if (bills.length === 0) throw new Error("No bills for this variant");
 
-    // Determine retailer/distributor access
-    if (user.role === "retailer") {
-      const r = await OrdersRepo.findRetailerByUserId(user.id);
-      if (!r) throw new Error("Forbidden");
-      if (!bills.some(b => b.retailerId === r.id)) throw new Error("Forbidden");
-    }
-
-    if (user.role === "distributor") {
-      const d = await OrdersRepo.findDistributorByUserId(user.id);
-      if (!d) throw new Error("Forbidden");
-      if (!bills.some(b => b.distributorId === d.id)) throw new Error("Forbidden");
-    }
+    const actor = await resolveActor(user);
+    const hasAccess = bills.some(
+      (b) =>
+        (actor.role === "retailer" && b.retailerId === actor.id) ||
+        (actor.role === "distributor" && b.distributorId === actor.id)
+    );
+    if (!hasAccess) throw new AppError("Forbidden", 403);
 
     return LedgerRepo.getLedgerForVariant(variantId);
   },
@@ -67,16 +56,8 @@ const LedgerService = {
     const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
     if (!invoice) throw new Error("Invoice not found");
 
-    // Auth
-    if (user.role === "retailer") {
-      const r = await OrdersRepo.findRetailerByUserId(user.id);
-      if (!r || r.id !== invoice.retailerId) throw new Error("Forbidden");
-    }
-
-    if (user.role === "distributor") {
-      const d = await OrdersRepo.findDistributorByUserId(user.id);
-      if (!d || d.id !== invoice.distributorId) throw new Error("Forbidden");
-    }
+    const actor = await resolveActor(user);
+    assertParty(actor, invoice);
 
     return LedgerRepo.getLedgerForInvoice(invoiceId);
   },
