@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { errorHandler, notFoundHandler } from "./api-gateway/middlewares/error.middleware.js";
+import { corsOriginHandler } from "./config/cors.js";
 
 // Core modules
 import authRoutes from "./api-gateway/routes/auth.routes.js";
@@ -40,42 +41,10 @@ app.set("trust proxy", 1);
 
 app.use(helmet());
 
-// CLIENT_ORIGIN may be a single origin or a comma-separated list. Left unset,
-// this falls back to reflecting the request origin (cors()'s own default) -
-// the same effective behaviour as before, but now opt-in and logged, rather
-// than a silent unrestricted default (docs/10-known-issues.md P1-4).
-const allowedOrigins = (process.env.CLIENT_ORIGIN || "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-if (allowedOrigins.length === 0) {
-  console.warn(
-    "⚠️  CLIENT_ORIGIN is not set - CORS is reflecting all origins. Set CLIENT_ORIGIN in .env for production."
-  );
-}
-
-app.use(
-  cors(
-    allowedOrigins.length
-      ? {
-          origin: (origin, cb) => {
-            // origin is undefined for same-origin/non-browser requests (curl, mobile apps)
-            if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-            // A disallowed origin is a rejected request, not a server fault -
-            // without an explicit status the error middleware classifies this
-            // as a 500 "Internal server error", which looks like the backend
-            // crashed when really CLIENT_ORIGIN just needs the caller's origin.
-            const err = new Error(
-              `Origin ${origin} is not allowed by CORS (set CLIENT_ORIGIN)`
-            );
-            err.status = 403;
-            cb(err);
-          },
-        }
-      : undefined
-  )
-);
+// CLIENT_ORIGIN parsing/matching lives in ./config/cors.js, shared with
+// Socket.IO's CORS policy (realtime/socket.server.js) so the two can never
+// diverge the way they used to (docs/10-known-issues.md P1-4; P5-12).
+app.use(cors({ origin: corsOriginHandler }));
 // Loose global limiter (P5-6): everything that isn't one of the sensitive
 // auth-ish endpoints below still gets a ceiling, just a generous one.
 const globalLimiter = rateLimit({

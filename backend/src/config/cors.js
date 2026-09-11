@@ -6,11 +6,9 @@
 // default to `origin: "*"` and never comma-split CLIENT_ORIGIN the way
 // app.js does).
 //
-// NOTE: app.js is NOT wired to import this yet - it still carries its own
-// inline copy of this same logic. A later reconciliation pass should switch
-// app.js over to use this module too, so there is exactly one implementation.
-// That edit is intentionally not made here to avoid colliding with a parallel
-// in-flight change to app.js (helmet/rate-limiting/trust proxy).
+// app.js now imports corsOriginHandler from here too (reconciled after the
+// helmet/rate-limiting/trust-proxy change landed) - there is exactly one
+// implementation of CLIENT_ORIGIN parsing/matching in the codebase.
 
 let warnedUnset = false;
 
