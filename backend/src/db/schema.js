@@ -27,6 +27,12 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   phone: text("phone").notNull(),
 
+  // Bumped whenever a session-invalidating event happens (password reset).
+  // Checked against the JWT payload's own tokenVersion on every authenticated
+  // request (auth.middleware.js) - the revocation lever the leaked-secret
+  // finding (P5-1/P5-8) showed was otherwise missing.
+  tokenVersion: integer("token_version").notNull().default(0),
+
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -410,15 +416,30 @@ export const outbox = pgTable(
   17. OTP CODES
   =============================== */
 
-export const otpCodes = pgTable("otp_codes", {
-  id: uuid("id").defaultRandom().primaryKey(),
+export const otpCodes = pgTable(
+  "otp_codes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
 
-  email: text("email").notNull(),
-  otp: text("otp").notNull(),
+    email: text("email").notNull(),
+    otp: text("otp").notNull(),
 
-  expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: false }).defaultNow(),
-});
+    // Brute-force hardening, mirroring order_delivery_codes'
+    // attempts/lockedUntil/consumedAt shape (P5-5).
+    attempts: integer("attempts").notNull().default(0),
+    lockedUntil: timestamp("locked_until"),
+    consumedAt: timestamp("consumed_at"),
+
+    expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: false }).defaultNow(),
+  },
+  (table) => [
+    // One live OTP per email - saveOtp upserts on this instead of inserting,
+    // so requesting a new code invalidates any prior one rather than
+    // accumulating several simultaneously-valid codes.
+    unique("uq_otp_email").on(table.email),
+  ]
+);
 
 /* ===============================
   18. PRODUCT BILLS (per variant)
