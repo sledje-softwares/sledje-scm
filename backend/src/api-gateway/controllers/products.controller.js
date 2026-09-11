@@ -102,10 +102,17 @@ export async function bulkImportProducts(req, res, next) {
       rows = xlsx.utils.sheet_to_json(sheet);
     }
 
-    // Pass logged-in distributor user id + rows
-    await ProductsService.bulkImportForDistributor(req.user.id, rows);
+    // Pass logged-in distributor user id + rows. Returns a per-row verdict
+    // (mirrors /sync's per-op results) rather than a blanket success message -
+    // some rows may be rejected (unknown/un-joined distributorship, SKU
+    // conflict) while others succeed.
+    const results = await ProductsService.bulkImportForDistributor(req.user.id, rows);
+    const summary = results.reduce(
+      (acc, r) => ({ ...acc, [r.status]: (acc[r.status] || 0) + 1 }),
+      {}
+    );
 
-    res.json({ message: "Bulk import successful" });
+    res.json({ message: "Bulk import processed", summary, results });
   } catch (err) {
     console.error("bulkImportProducts error:", err);
     next(err);
