@@ -133,8 +133,14 @@ test("requesting a new OTP invalidates the previously issued one (P5-5)", async 
     body: { email: user.email },
   });
   const after2 = await otpRowsFor(user.email);
-  const [secondOtp] = newRows(after1, after2);
-  assert.ok(secondOtp, "expected the second OTP to have been saved");
+  // saveOtp upserts on the email's unique constraint (the P5-5 fix), so the
+  // second request replaces the same row in place rather than inserting a
+  // new one - there is at most one live OTP per email by construction. The
+  // row's id is therefore unchanged; what must differ is its otp value.
+  const [secondOtp] = after2;
+  assert.ok(secondOtp, "expected an OTP row to still exist for this email");
+  assert.equal(secondOtp.id, firstOtp.id, "expected the row to be replaced in place, not duplicated");
+  assert.notEqual(secondOtp.otp, firstOtp.otp, "expected the second request to issue a different code");
 
   const res = await apiRequest(baseUrl, {
     method: "POST",
