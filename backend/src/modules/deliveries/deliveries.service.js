@@ -141,11 +141,6 @@ const DeliveriesService = {
         deliveredAt: new Date(),
       });
       await DeliveryCodeRepo.markConsumed(tx, order.id);
-      await OrdersRepo.insertOutbox(tx, "orders.delivered", {
-        order: updatedOrder,
-        deliveryId,
-        agentId: agent.id,
-      });
       await notifyOrderDelivered(tx, order);
 
       return updatedOrder;

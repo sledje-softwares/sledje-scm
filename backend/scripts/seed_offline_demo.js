@@ -11,8 +11,9 @@ import "dotenv/config";
 import bcrypt from "bcrypt";
 import { db } from "../src/config/postgres.js";
 import {
-  users, retailers, distributors, distributorships,
-  products, productVariants, inventory,
+  users, retailers, distributors, distributorships, distributorshipMembers,
+  products, productVariants, inventory, connections, distributorInventory,
+  deliveryAgents,
 } from "../src/db/schema.js";
 import { sql } from "drizzle-orm";
 import ProductBillsRepo from "../src/modules/product-bills/product-bills.repository.js";
@@ -32,6 +33,9 @@ async function main() {
       sale_payments, sale_items, sales, customers, retail_prices,
       product_bill_layers, product_bill_transactions, product_delivery_log,
       product_bills, ledger, outbox, inventory,
+      order_delivery_codes, order_items, orders, deliveries, delivery_agents,
+      connections, connection_requests, distributor_inventory,
+      distributorship_members,
       product_variants, products, distributorships,
       retailers, distributors, users
     RESTART IDENTITY CASCADE
@@ -55,16 +59,37 @@ async function main() {
     businessType: "wholesale", pincode: "560001",
   }).returning();
 
+  const [au] = await db.insert(users).values({
+    role: "delivery_agent", email: "agent@verify.local", password, phone: "9000000003",
+  }).returning();
+  const [agent] = await db.insert(deliveryAgents).values({
+    userId: au.id, name: "Verify Runner", phone: "9000000003",
+    vehicleNumber: "KA01AB1234", operatingPincode: "560001",
+  }).returning();
+
+  // The retailer has to already be connected to the distributor to order from
+  // them, and the distributor has to hold active membership in the
+  // distributorship before it may touch that catalogue at all (Phase 2). A
+  // seed without these two rows produces a system that looks populated but
+  // where every write path 403s.
+  await db.insert(connections).values({
+    retailerId: retailer.id, distributorId: distributor.id,
+  });
+
   const [ship] = await db.insert(distributorships).values({
     name: "Verify Foods", description: "demo",
   }).returning();
+  await db.insert(distributorshipMembers).values({
+    distributorId: distributor.id, distributorshipId: ship.id, status: "active",
+  });
   const [product] = await db.insert(products).values({
     distributorshipId: ship.id, name: "Parle-G", category: "Biscuits",
+    createdByDistributorId: distributor.id,
   }).returning();
 
   const skus = [
-    { name: "100g", sku: "PARLE-G-100G", mrp: "20.00", layers: [{ qty: 50, cost: 10 }, { qty: 50, cost: 12 }] },
-    { name: "250g", sku: "PARLE-G-250G", mrp: "45.00", layers: [{ qty: 30, cost: 30 }] },
+    { name: "100g", sku: "PARLE-G-100G", mrp: "20.00", sell: "12.00", layers: [{ qty: 50, cost: 10 }, { qty: 50, cost: 12 }] },
+    { name: "250g", sku: "PARLE-G-250G", mrp: "45.00", sell: "32.00", layers: [{ qty: 30, cost: 30 }] },
   ];
 
   const out = [];
@@ -73,6 +98,13 @@ async function main() {
       productId: product.id, name: s.name, sku: s.sku, mrp: s.mrp,
       unit: "packet", gstRate: "0",
     }).returning();
+
+    // What the distributor has on hand to sell, and at what price - order
+    // totals price from here, not from the variant's MRP.
+    await db.insert(distributorInventory).values({
+      distributorId: distributor.id, variantId: variant.id,
+      stock: 500, sellingPrice: s.sell, costPrice: s.sell,
+    });
 
     const bill = await ProductBillsRepo.createBill({
       retailerId: retailer.id, distributorId: distributor.id, variantId: variant.id,
@@ -90,7 +122,10 @@ async function main() {
 
   console.log(JSON.stringify({
     login: { email: EMAIL, password: PASSWORD },
-    retailerId: retailer.id, distributorId: distributor.id, variants: out,
+    distributorLogin: { email: "dist@verify.local", password: PASSWORD },
+    agentLogin: { email: "agent@verify.local", password: PASSWORD },
+    retailerId: retailer.id, distributorId: distributor.id,
+    agentId: agent.id, distributorshipId: ship.id, variants: out,
   }, null, 2));
   process.exit(0);
 }
